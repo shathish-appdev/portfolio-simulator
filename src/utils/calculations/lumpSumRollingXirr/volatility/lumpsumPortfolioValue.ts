@@ -26,53 +26,54 @@ export function calculateDailyLumpsumPortfolioValue(
     return [];
   }
 
-  // Calculate units purchased on day 1 for each fund
   const unitsPerFund: number[] = [];
+
+  // Calculate units based on first available NAV >= startDate
   for (let f = 0; f < navDataList.length; f++) {
-    const startNav = navDataList[f].find(entry => 
-      entry.date.getTime() === startDate.getTime()
-    );
-    
+    const startNav = navDataList[f].find(entry => entry.date >= startDate);
     if (!startNav) {
       return [];
     }
-    
-    const fundAllocation = (investmentAmount * allocations[f]) / 100;
-    unitsPerFund[f] = fundAllocation / startNav.nav;
+    unitsPerFund[f] = (investmentAmount * allocations[f] / 100) / startNav.nav;
   }
 
-  // Calculate portfolio value for each day
+  // Build master date list
+  const dateSet = new Set<number>();
+  navDataList.forEach(fund => {
+    fund.forEach(entry => {
+      if (entry.date >= startDate && entry.date <= endDate) {
+        dateSet.add(entry.date.getTime());
+      }
+    });
+  });
+
+  const allDates = Array.from(dateSet).sort((a, b) => a - b).map(ts => new Date(ts));
+
   const dailyValues: DailyLumpsumPortfolioValue[] = [];
-  
-  // Use first fund's dates as reference (all should be aligned after filling)
-  const relevantDates = navDataList[0].filter(
-    entry => entry.date >= startDate && entry.date <= endDate
-  );
 
-  for (const dateEntry of relevantDates) {
-    const currentDate = dateEntry.date;
+  for (const date of allDates) {
     let totalValue = 0;
-    let valid = true;
 
-    // Sum value across all funds
     for (let f = 0; f < navDataList.length; f++) {
-      const navEntry = navDataList[f].find(
-        entry => entry.date.getTime() === currentDate.getTime()
-      );
-      
+      // Find last known NAV on or before current date
+      let navEntry = null;
+      for (let i = navDataList[f].length - 1; i >= 0; i--) {
+        if (navDataList[f][i].date <= date) {
+          navEntry = navDataList[f][i];
+          break;
+        }
+      }
+
       if (!navEntry) {
-        valid = false;
+        totalValue = 0;
         break;
       }
-      
+
       totalValue += unitsPerFund[f] * navEntry.nav;
     }
 
-    if (valid && totalValue > 0) {
-      dailyValues.push({
-        date: currentDate,
-        totalValue
-      });
+    if (totalValue > 0) {
+      dailyValues.push({ date, totalValue });
     }
   }
 
