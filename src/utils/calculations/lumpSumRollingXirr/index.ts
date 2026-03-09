@@ -69,7 +69,7 @@ function calculateFundUnits(
 }
 
 // ============================================================================
-// PORTFOLIO VALUE FOR ANY DATE
+// PORTFOLIO VALUE
 // ============================================================================
 
 function calculatePortfolioValueForDate(
@@ -164,11 +164,14 @@ export function calculateLumpSumRollingXirr(
 
     if (totalValue === null) continue;
 
+    // volatility window fix
     const dailyValues: DailyPortfolioValue[] = [];
 
     for (let j = 0; j <= i; j++) {
 
       const day = sorted[j].date;
+
+      if (day < startDate) continue;
 
       const value = calculatePortfolioValueForDate(
         fundDateMaps,
