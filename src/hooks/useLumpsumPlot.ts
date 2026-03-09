@@ -73,10 +73,12 @@ export function useLumpsumPlot({
 
                 if (!stockData?.length) continue;
 
-                nav = stockData.map(i => ({
-                  date: new Date(i.date),
-                  nav: i.nav
-                }));
+                nav = stockData
+               .map(i => ({
+                date: new Date(i.date),
+                nav: i.nav
+                }))
+                .sort((a, b) => a.date.getTime() - b.date.getTime());
 
                 identifier = `${pIdx}_${asset.symbol}`;
 
@@ -137,7 +139,7 @@ export function useLumpsumPlot({
         if (allocations.length !== navDataList.length) {
 
           allocations = Array(navDataList.length).fill(
-            100 / navDataList.length
+            1 / navDataList.length
           );
         }
 
@@ -154,6 +156,7 @@ export function useLumpsumPlot({
               import.meta.url
             )
           );
+          allocations = allocations.map(a => a / 100);
 
           worker.postMessage({
             navDataList,
