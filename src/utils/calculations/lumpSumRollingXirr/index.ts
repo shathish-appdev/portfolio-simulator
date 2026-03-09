@@ -1,5 +1,5 @@
 import { NavEntry } from '../../../types/navData';
-import { areDatesContinuous } from '../../date/dateUtils';
+import { areDatesContinuous, getNthPreviousMonthDate } from '../../date/dateUtils';
 import { fillMissingNavDates } from '../../data/fillMissingNavDates';
 import { calculateVolatility, DailyPortfolioValue } from './volatility/volatilityCalculator';
 import { Transaction } from '../sipRollingXirr/types';
@@ -18,7 +18,7 @@ export interface RollingXirrEntry {
 export type { Transaction } from '../sipRollingXirr/types';
 
 // ============================================================================
-// HELPER FUNCTIONS
+// HELPERS
 // ============================================================================
 
 function toDateKey(date: Date): string {
@@ -42,7 +42,7 @@ function getSortedDates(fund: NavEntry[]): NavEntry[] {
 }
 
 // ============================================================================
-// FUND UNITS (Buy once at start date)
+// FUND UNITS
 // ============================================================================
 
 function calculateFundUnits(
@@ -61,7 +61,6 @@ function calculateFundUnits(
     if (!navEntry) return null;
 
     const allocation = (investmentAmount * allocations[f]) / 100;
-
     units[f] = allocation / navEntry.nav;
   }
 
@@ -69,24 +68,22 @@ function calculateFundUnits(
 }
 
 // ============================================================================
-// TOTAL PORTFOLIO VALUE
+// TOTAL VALUE
 // ============================================================================
 
 function calculateTotalValue(
   fundDateMaps: Map<string, NavEntry>[],
-  date: Date,
+  endDate: Date,
   fundUnits: number[]
-): number {
+): number | null {
 
   let total = 0;
-
-  const dateKey = toDateKey(date);
+  const endKey = toDateKey(endDate);
 
   for (let f = 0; f < fundDateMaps.length; f++) {
 
-    const navEntry = fundDateMaps[f].get(dateKey);
-
-    if (!navEntry) continue;
+    const navEntry = fundDateMaps[f].get(endKey);
+    if (!navEntry) return null;
 
     total += fundUnits[f] * navEntry.nav;
   }
@@ -95,26 +92,70 @@ function calculateTotalValue(
 }
 
 // ============================================================================
-// GOOGLE FINANCE RETURN
+// CAGR RETURN
 // ============================================================================
 
-function calculateReturn(
+function calculateRollingReturn(
   investmentAmount: number,
-  totalValue: number
+  totalValue: number,
+  years: number
 ): number {
 
-  return (totalValue / investmentAmount) - 1;
+  return Math.pow(totalValue / investmentAmount, 1 / years) - 1;
 }
 
 // ============================================================================
-// MAIN CALCULATION FUNCTION
+// DAILY PORTFOLIO SERIES
+// ============================================================================
+
+function buildDailyPortfolioValues(
+  fundDateMaps: Map<string, NavEntry>[],
+  fundUnits: number[],
+  sortedDates: NavEntry[],
+  startDate: Date,
+  endIndex: number
+): DailyPortfolioValue[] {
+
+  const dailyValues: DailyPortfolioValue[] = [];
+
+  for (let j = 0; j <= endIndex; j++) {
+
+    const date = sortedDates[j].date;
+
+    if (date < startDate) continue;
+
+    const key = toDateKey(date);
+
+    let portfolioValue = 0;
+
+    for (let f = 0; f < fundDateMaps.length; f++) {
+
+      const navEntry = fundDateMaps[f].get(key);
+      if (!navEntry) continue;
+
+      portfolioValue += fundUnits[f] * navEntry.nav;
+    }
+
+    dailyValues.push({
+      date,
+      totalValue: portfolioValue
+    });
+  }
+
+  return dailyValues;
+}
+
+// ============================================================================
+// MAIN FUNCTION
 // ============================================================================
 
 export function calculateLumpSumRollingXirr(
 
   navDataList: NavEntry[][],
+  years: number = 1,
   allocations: number[] = [],
-  investmentAmount: number = 100
+  investmentAmount: number = 100,
+  includeNilTransactions: boolean = false
 
 ): RollingXirrEntry[] {
 
@@ -133,55 +174,63 @@ export function calculateLumpSumRollingXirr(
 
   const sorted = getSortedDates(filledNavs[0]);
 
-  const startDate = sorted[0].date;
+  const firstDate = sorted[0].date;
 
-  const fundUnits = calculateFundUnits(
-    fundDateMaps,
-    startDate,
-    actualAllocations,
-    investmentAmount
-  );
-
-  if (!fundUnits) return [];
+  const months = years * 12;
 
   const results: RollingXirrEntry[] = [];
 
-  const dailyValues: DailyPortfolioValue[] = [];
-
   for (let i = 0; i < sorted.length; i++) {
 
-    const date = sorted[i].date;
+    const endDate = sorted[i].date;
+
+    const startDate = getNthPreviousMonthDate(endDate, months);
+
+    if (startDate < firstDate) continue;
+
+    const fundUnits = calculateFundUnits(
+      fundDateMaps,
+      startDate,
+      actualAllocations,
+      investmentAmount
+    );
+
+    if (!fundUnits) continue;
 
     const totalValue = calculateTotalValue(
       fundDateMaps,
-      date,
+      endDate,
       fundUnits
     );
 
-    const returnValue = calculateReturn(
-      investmentAmount,
-      totalValue
+    if (totalValue === null) continue;
+
+    const dailyValues = buildDailyPortfolioValues(
+      fundDateMaps,
+      fundUnits,
+      sorted,
+      startDate,
+      i
     );
 
-    dailyValues.push({
-      date,
-      totalValue
-    });
+    const volatility = calculateVolatility(dailyValues);
+
+    const rollingReturn = calculateRollingReturn(
+      investmentAmount,
+      totalValue,
+      years
+    );
 
     results.push({
 
-      date,
+      date: endDate,
 
-      xirr:
-        Math.round(returnValue * 10000) / 10000,
+      xirr: Math.round(rollingReturn * 10000) / 10000,
 
       transactions: [],
 
-      volatility:
-        Math.round(calculateVolatility(dailyValues) * 10000) / 10000
-
+      volatility: Math.round(volatility * 10000) / 10000
     });
-
   }
 
   return results;
