@@ -53,7 +53,7 @@ const AppContent: React.FC = () => {
           { label: "Lumpsum Simulator", active: isLumpsumTab },
           { label: "SIP Simulator", active: isSipTab },
           { label: "Historical Values", active: isHistoricalTab },
-          { label: "Stock Price", active: isStockPriceTab },
+          { label: "Lumpsum", active: isStockPriceTab },
           { label: "Help", info: { id: "help" } },
         ]}
         onMainItemSelect={(item) => {
@@ -67,7 +67,7 @@ const AppContent: React.FC = () => {
             case "Historical Values":
               navigate("/historical");
               break;
-            case "Stock Price":
+            case "Lumpsum":
               navigate("/stock-price");
               break;
             case "Help":

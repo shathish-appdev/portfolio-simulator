@@ -47,14 +47,34 @@ interface YahooFinanceResponse {
   };
 }
 
+interface FetchStockDataOptions {
+  startDate?: string;
+  endDate?: string;
+}
+
 class YahooFinanceService {
   private stockDataCache: Record<string, ProcessedIndexData[]> = {};
 
-  async fetchStockData(symbol: string): Promise<ProcessedIndexData[]> {
-    if (this.stockDataCache[symbol]) return this.stockDataCache[symbol];
+  async fetchStockData(
+    symbol: string,
+    options?: FetchStockDataOptions
+  ): Promise<ProcessedIndexData[]> {
+    const cacheKey = options?.startDate && options?.endDate
+      ? `${symbol}_${options.startDate}_${options.endDate}`
+      : symbol;
+    if (!options?.startDate || !options?.endDate) {
+      if (this.stockDataCache[cacheKey]) return this.stockDataCache[cacheKey];
+    }
 
     try {
-      const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=100y`;
+      let yahooUrl: string;
+      if (options?.startDate && options?.endDate) {
+        const period1 = Math.floor(new Date(options.startDate + "T00:00:00Z").getTime() / 1000);
+        const period2 = Math.floor(new Date(options.endDate + "T23:59:59Z").getTime() / 1000);
+        yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&period1=${period1}&period2=${period2}`;
+      } else {
+        yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=100y`;
+      }
 
       const proxyUrl = `https://cors-proxy-lake-omega.vercel.app/api/proxy?url=${encodeURIComponent(
         yahooUrl
@@ -86,7 +106,9 @@ class YahooFinanceService {
 
       if (processed.length < 2) throw new Error(`Not enough valid data for ticker "${symbol}"`);
 
-      this.stockDataCache[symbol] = processed;
+      if (!options?.startDate || !options?.endDate) {
+        this.stockDataCache[cacheKey] = processed;
+      }
       return processed;
     } catch (err) {
       const msg = `Error fetching Yahoo Finance ticker "${symbol}"`;

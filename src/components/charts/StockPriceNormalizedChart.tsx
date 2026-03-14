@@ -5,28 +5,32 @@ import { Block } from 'baseui/block';
 import { CHART_STYLES } from '../../constants';
 import { STOCK_CHART_NAVIGATOR, STOCK_CHART_SCROLLBAR } from '../../utils/stockChartConfig';
 
-export interface StockSeries {
-  ticker: string;
-  data: Array<{ date: Date; nav: number }>;
-}
+import type { StockSeries } from './StockPriceChart';
 
-interface StockPriceChartProps {
+interface StockPriceNormalizedChartProps {
   data?: Array<{ date: Date; nav: number }>;
   ticker?: string;
   series?: StockSeries[];
   colors?: string[];
 }
 
-const formatPrice = (value: number): string => {
-  if (value >= 1000) return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  if (value >= 1) return value.toFixed(2);
-  if (value >= 0.01) return value.toFixed(4);
-  return value.toFixed(6);
-};
+/**
+ * Normalize data so start date price = 100.
+ * normalizedValue = (price / priceAtStart) * 100
+ */
+function normalizeToBase100(data: Array<{ date: Date; nav: number }>): Array<[number, number]> {
+  if (data.length === 0) return [];
+  const baseValue = data[0].nav;
+  if (baseValue === 0) return [];
+  return data.map(item => [
+    item.date.getTime(),
+    Math.round((item.nav / baseValue) * 10000) / 100,
+  ]);
+}
 
 const DEFAULT_COLORS = ['#007bff', '#28a745', '#ff9800', '#e91e63', '#9c27b0', '#00bcd4', '#795548', '#607d8b'];
 
-export const StockPriceChart: React.FC<StockPriceChartProps> = ({
+export const StockPriceNormalizedChart: React.FC<StockPriceNormalizedChartProps> = ({
   data,
   ticker,
   series: seriesProp,
@@ -36,7 +40,7 @@ export const StockPriceChart: React.FC<StockPriceChartProps> = ({
   const chartSeries = isMulti
     ? seriesProp!.map((s, i) => ({
         name: s.ticker,
-        data: s.data.map(item => [item.date.getTime(), item.nav]),
+        data: normalizeToBase100(s.data),
         type: 'line' as const,
         color: colors[i % colors.length],
         showInNavigator: true,
@@ -44,21 +48,21 @@ export const StockPriceChart: React.FC<StockPriceChartProps> = ({
     : data
       ? [{
           name: ticker!,
-          data: data.map(item => [item.date.getTime(), item.nav]),
+          data: normalizeToBase100(data),
           type: 'line' as const,
-          color: '#007bff',
+          color: '#28a745',
           showInNavigator: true,
         }]
       : [];
 
   const chartOptions = {
-    title: { text: isMulti ? 'Portfolio - Price' : `${ticker} - Price` },
+    title: { text: isMulti ? 'Portfolio - Normalized (Base = 100)' : `${ticker} - Normalized (Base = 100)` },
     credits: { enabled: false },
     chart: {
       backgroundColor: CHART_STYLES.colors.background,
       borderRadius: 8,
       spacing: [20, 20, 20, 20],
-      height: 500,
+      height: 400,
       zooming: { mouseWheel: false },
     },
     xAxis: {
@@ -67,25 +71,21 @@ export const StockPriceChart: React.FC<StockPriceChartProps> = ({
       labels: { style: CHART_STYLES.axisLabels },
       gridLineColor: CHART_STYLES.colors.gridLine,
       lineColor: CHART_STYLES.colors.line,
-      tickColor: CHART_STYLES.colors.tick
+      tickColor: CHART_STYLES.colors.tick,
     },
     yAxis: {
       opposite: false,
       title: {
-        text: 'Price',
+        text: 'Index (Base = 100)',
         align: 'middle',
         rotation: -90,
         x: -10,
-        style: CHART_STYLES.axisTitle
+        style: CHART_STYLES.axisTitle,
       },
-      labels: {
-        formatter: function (this: { value: number }) {
-          return formatPrice(this.value);
-        },
-        style: CHART_STYLES.axisLabels
-      },
+      labels: { style: CHART_STYLES.axisLabels },
       gridLineColor: CHART_STYLES.colors.gridLine,
-      lineColor: CHART_STYLES.colors.line
+      lineColor: CHART_STYLES.colors.line,
+      plotLines: [{ value: 100, color: '#6b7280', dashStyle: 'Dash', width: 1, zIndex: 5 }],
     },
     rangeSelector: { enabled: false },
     navigator: STOCK_CHART_NAVIGATOR,
@@ -104,16 +104,15 @@ export const StockPriceChart: React.FC<StockPriceChartProps> = ({
             let html = `<div style="font-size: 12px; color: #ffffff;"><strong>${dateStr}</strong><br/>`;
             const pts = (this.points || []).slice().sort((a: any, b: any) => (b.y as number) - (a.y as number));
             pts.forEach((p: any) => {
-              html += `<span style="color:${p.series.color}">●</span> ${p.series.name}: <strong>${formatPrice(p.y)}</strong><br/>`;
+              html += `<span style="color:${p.series.color}">●</span> ${p.series.name}: <strong>${(p.y as number).toFixed(2)}</strong><br/>`;
             });
             return html + '</div>';
           }
         : function (this: { x: number; y: number }) {
             const dateStr = Highcharts.dateFormat('%e %b %Y', this.x);
-            const priceStr = formatPrice(this.y);
             return `<div style="font-size: 12px; color: #ffffff;">
               <strong>${dateStr}</strong><br/>
-              <span style="color:#007bff">●</span> <strong>Price:</strong> ${priceStr}
+              <span style="color:#28a745">●</span> <strong>Index:</strong> ${(this.y as number).toFixed(2)}
             </div>`;
           },
     },
@@ -122,9 +121,9 @@ export const StockPriceChart: React.FC<StockPriceChartProps> = ({
         animation: false,
         marker: {
           enabled: false,
-          states: { hover: { enabled: true, radius: 5 } }
+          states: { hover: { enabled: true, radius: 5 } },
         },
-      }
+      },
     },
     series: chartSeries,
     legend: {

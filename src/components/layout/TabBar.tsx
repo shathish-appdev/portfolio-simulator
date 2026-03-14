@@ -7,7 +7,7 @@ const TABS = [
   { path: "/lumpsum", label: "Lumpsum Simulator" },
   { path: "/sip", label: "SIP Simulator" },
   { path: "/historical", label: "Historical Values" },
-  { path: "/stock-price", label: "Stock Price" },
+  { path: "/stock-price", label: "Lumpsum" },
 ] as const;
 
 interface TabBarProps {
