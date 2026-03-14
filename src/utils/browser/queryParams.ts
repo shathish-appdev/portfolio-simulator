@@ -3,15 +3,15 @@ import { LumpsumPortfolio } from '../../types/lumpsumPortfolio';
 import { Asset } from '../../types/asset';
 
 // Utility functions for reading and writing portfolios and years to the query string
-export function getQueryParams() {
-  const params = new URLSearchParams(window.location.search);
+export function getQueryParams(searchOverride?: string) {
+  const search = searchOverride ?? window.location.search;
+  const params = new URLSearchParams(search);
   const portfoliosParam = params.get('portfolios');
   const years = params.get('years');
   const sipAmount = params.get('sipAmount');
   const lumpsumPortfoliosParam = params.get('lumpsumPortfolios');
   const lumpsumAmount = params.get('lumpsumAmount');
   const assetsParam = params.get('assets');
-  const logScale = params.get('logScale');
   const defaultThreshold = 5; // Default threshold if not in query params
 
   return {
@@ -53,14 +53,12 @@ export function getQueryParams() {
                   });
                 } else if ((type === 'yahoo' || type === 'yahooinr') && assetParts.length >= 3) {
                   const symbol = assetParts[1];
-                  const convertToINR = type === 'yahooinr';
                   selectedAssets.push({
                     type: 'yahoo_finance',
                     id: symbol,
-                    name: convertToINR ? `${symbol} (INR)` : symbol,
+                    name: symbol,
                     symbol: symbol,
-                    displayName: convertToINR ? `${symbol} (INR)` : symbol,
-                    convertToINR
+                    displayName: symbol
                   });
                 } else if (type === 'fixed' && assetParts.length >= 3) {
                   const returnPercentage = parseFloat(assetParts[1]);
@@ -126,14 +124,12 @@ export function getQueryParams() {
             };
           } else if (type === 'yahoo' || type === 'yahooinr') {
             const symbol = parts[1];
-            const convertToINR = type === 'yahooinr';
             return {
               type: 'yahoo_finance' as const,
               id: symbol,
-              name: convertToINR ? `${symbol} (INR)` : symbol,
+              name: symbol,
               symbol: symbol,
-              displayName: convertToINR ? `${symbol} (INR)` : symbol,
-              convertToINR
+              displayName: symbol
             };
           } else if (type === 'fixed') {
             const returnPercentage = parseFloat(parts[1]);
@@ -162,8 +158,6 @@ export function getQueryParams() {
           return null;
         }).filter((asset): asset is Asset => asset !== null)
       : [],
-    // Default to logarithmic scale when not specified
-    logScale: logScale ? logScale === '1' : true,
     portfolios: portfoliosParam
       ? portfoliosParam.split(';').map(p_str => {
           // Format: asset1:alloc1,asset2:alloc2,...|rebalFlag|rebalThreshold|stepUpFlag|stepUpPercentage
@@ -210,14 +204,12 @@ export function getQueryParams() {
                   });
                 } else if ((type === 'yahoo' || type === 'yahooinr') && assetParts.length >= 3) {
                   const symbol = assetParts[1];
-                  const convertToINR = type === 'yahooinr';
                   selectedAssets.push({
                     type: 'yahoo_finance',
                     id: symbol,
-                    name: convertToINR ? `${symbol} (INR)` : symbol,
+                    name: symbol,
                     symbol: symbol,
-                    displayName: convertToINR ? `${symbol} (INR)` : symbol,
-                    convertToINR
+                    displayName: symbol
                   });
                 } else if (type === 'fixed' && assetParts.length >= 3) {
                   const returnPercentage = parseFloat(assetParts[1]);
@@ -290,8 +282,7 @@ export function setQueryParams(sipPortfolios: SipPortfolio[], years: number, sip
             const cleanIndexName = asset.indexName.replace(/\s+/g, '_');
             return `idx:${cleanIndexName}:${allocation}`;
           } else if (asset.type === 'yahoo_finance') {
-            const prefix = asset.convertToINR ? 'yahooinr' : 'yahoo';
-            return `${prefix}:${asset.symbol}:${allocation}`;
+            return `yahoo:${asset.symbol}:${allocation}`;
           } else if (asset.type === 'fixed_return') {
             return `fixed:${asset.annualReturnPercentage}:${allocation}`;
           } else if (asset.type === 'inflation') {
@@ -311,7 +302,7 @@ export function setQueryParams(sipPortfolios: SipPortfolio[], years: number, sip
   window.history.replaceState({}, '', `?${urlParams}`);
 }
 
-export function setHistoricalValuesParams(assets: Asset[], logScale: boolean) {
+export function setHistoricalValuesParams(assets: Asset[]) {
   // Format: type:id;type:id;...
   const assetsStr = assets
     .map(asset => {
@@ -321,8 +312,7 @@ export function setHistoricalValuesParams(assets: Asset[], logScale: boolean) {
         const cleanIndexName = asset.indexName.replace(/\s+/g, '_');
         return `idx:${cleanIndexName}`;
       } else if (asset.type === 'yahoo_finance') {
-        const prefix = asset.convertToINR ? 'yahooinr' : 'yahoo';
-        return `${prefix}:${asset.symbol}`;
+        return `yahoo:${asset.symbol}`;
       } else if (asset.type === 'fixed_return') {
         return `fixed:${asset.annualReturnPercentage}`;
       } else if (asset.type === 'inflation') {
@@ -333,6 +323,6 @@ export function setHistoricalValuesParams(assets: Asset[], logScale: boolean) {
     .filter(s => s !== null)
     .join(';');
   
-  const urlParams = `assets=${assetsStr}&logScale=${logScale ? '1' : '0'}`;
+  const urlParams = `assets=${assetsStr}`;
   window.history.replaceState({}, '', `?${urlParams}`);
 }

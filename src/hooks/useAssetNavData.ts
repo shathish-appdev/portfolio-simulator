@@ -14,7 +14,7 @@ export const useAssetNavData = () => {
       case 'index_fund':
         return indexService.fetchIndexData(asset.indexName);
       case 'yahoo_finance':
-        return yahooFinanceService.fetchStockDataConverted(asset.symbol, asset.convertToINR);
+        return yahooFinanceService.fetchStockData(asset.symbol);
       case 'fixed_return':
         return fixedReturnService.generateFixedReturnData(
           asset.annualReturnPercentage,

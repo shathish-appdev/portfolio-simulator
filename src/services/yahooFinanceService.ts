@@ -49,7 +49,6 @@ interface YahooFinanceResponse {
 
 class YahooFinanceService {
   private stockDataCache: Record<string, ProcessedIndexData[]> = {};
-  private currencyCache: Record<string, string> = {};
 
   async fetchStockData(symbol: string): Promise<ProcessedIndexData[]> {
     if (this.stockDataCache[symbol]) return this.stockDataCache[symbol];
@@ -97,41 +96,8 @@ class YahooFinanceService {
     }
   }
 
-  async fetchStockDataConverted(
-    symbol: string,
-    convertToINR: boolean
-  ): Promise<ProcessedIndexData[]> {
-    const data = await this.fetchStockData(symbol);
-    if (!convertToINR) return data;
-
-    const currency = this.currencyCache[symbol];
-    if (!currency || currency === "INR") return data;
-
-    return this._convertToINR(data, currency);
-  }
-
-  private async _convertToINR(
-    data: ProcessedIndexData[],
-    fromCurrency: string
-  ): Promise<ProcessedIndexData[]> {
-    const forexSymbol = `${fromCurrency}INR=X`;
-    const forexData = await this.fetchStockData(forexSymbol);
-
-    let fxIndex = 0;
-    let rate = forexData[0]?.nav || 1;
-
-    return data.map((point) => {
-      while (fxIndex < forexData.length && forexData[fxIndex].date <= point.date) {
-        rate = forexData[fxIndex].nav;
-        fxIndex++;
-      }
-      return { date: point.date, nav: point.nav * rate };
-    });
-  }
-
   clearCache(): void {
     this.stockDataCache = {};
-    this.currencyCache = {};
   }
 }
 

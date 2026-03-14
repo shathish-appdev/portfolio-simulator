@@ -10,6 +10,7 @@ import { AppNavBar } from "baseui/app-nav-bar";
 import { LumpsumSimulatorTab } from "./pages/LumpsumSimulatorTab";
 import { SipSimulatorTab } from "./pages/SipSimulatorTab";
 import { HistoricalValuesTab } from "./pages/HistoricalValuesTab";
+import { StockPriceTab } from "./pages/StockPriceTab";
 import { BottomBar } from "./components/layout/BottomBar";
 import { HelpProvider, HelpDrawer, useHelp } from "./components/help";
 import { trackPageView } from "./utils/analytics";
@@ -39,6 +40,7 @@ const AppContent: React.FC = () => {
   const isLumpsumTab = location.pathname === "/lumpsum";
   const isSipTab = location.pathname === "/sip";
   const isHistoricalTab = location.pathname === "/historical";
+  const isStockPriceTab = location.pathname === "/stock-price";
 
   return (
     <Container>
@@ -50,6 +52,7 @@ const AppContent: React.FC = () => {
           { label: "Lumpsum Simulator", active: isLumpsumTab },
           { label: "SIP Simulator", active: isSipTab },
           { label: "Historical Values", active: isHistoricalTab },
+          { label: "Stock Price", active: isStockPriceTab },
           { label: "Help", info: { id: "help" } },
         ]}
         onMainItemSelect={(item) => {
@@ -62,6 +65,9 @@ const AppContent: React.FC = () => {
               break;
             case "Historical Values":
               navigate("/historical");
+              break;
+            case "Stock Price":
+              navigate("/stock-price");
               break;
             case "Help":
               openHelp("getting-started");
@@ -95,6 +101,7 @@ const AppContent: React.FC = () => {
           <Route path="/lumpsum" element={null} />
           <Route path="/sip" element={null} />
           <Route path="/historical" element={null} />
+          <Route path="/stock-price" element={null} />
           <Route path="/portfolio" element={<Navigate to="/sip" replace />} />
         </Routes>
 
@@ -119,6 +126,10 @@ const AppContent: React.FC = () => {
                 funds={funds}
                 loadNavData={loadAssetNavData}
               />
+            </Block>
+
+            <Block display={isStockPriceTab ? "block" : "none"} flex="1">
+              <StockPriceTab funds={funds} />
             </Block>
           </>
         )}

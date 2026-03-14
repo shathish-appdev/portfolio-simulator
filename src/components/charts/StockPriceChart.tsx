@@ -2,38 +2,26 @@ import React from 'react';
 import Highcharts from 'highcharts/highstock';
 import HighchartsReact from 'highcharts-react-official';
 import { Block } from 'baseui/block';
-import { Asset } from '../../types/asset';
 import { CHART_STYLES } from '../../constants';
 import { STOCK_CHART_NAVIGATOR, STOCK_CHART_SCROLLBAR } from '../../utils/stockChartConfig';
 
-interface HistoricalValuesChartProps {
-  navDatas: Record<string, Array<{ date: Date; nav: number }>>;
-  assets: Asset[];
-  colors: string[];
+interface StockPriceChartProps {
+  data: Array<{ date: Date; nav: number }>;
+  ticker: string;
 }
 
-export const HistoricalValuesChart: React.FC<HistoricalValuesChartProps> = ({
-  navDatas,
-  assets,
-  colors
-}) => {
-  const series = assets
-    .map((asset, idx) => {
-      const navData = navDatas[idx.toString()];
-      if (!navData || navData.length === 0) return null;
-      return {
-        name: asset.name,
-        data: navData.map(item => [item.date.getTime(), item.nav]),
-        type: 'line',
-        color: colors[idx % colors.length],
-        marker: { enabled: false },
-        showInNavigator: true,
-      };
-  })
-    .filter(Boolean) as { name: string; data: [number, number][]; type: string; color: string; marker: { enabled: boolean }; showInNavigator: boolean }[];
+const formatPrice = (value: number): string => {
+  if (value >= 1000) return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (value >= 1) return value.toFixed(2);
+  if (value >= 0.01) return value.toFixed(4);
+  return value.toFixed(6);
+};
+
+export const StockPriceChart: React.FC<StockPriceChartProps> = ({ data, ticker }) => {
+  const seriesData = data.map(item => [item.date.getTime(), item.nav]);
 
   const chartOptions = {
-    title: { text: '' },
+    title: { text: `${ticker} - Price` },
     credits: { enabled: false },
     chart: {
       backgroundColor: CHART_STYLES.colors.background,
@@ -51,16 +39,18 @@ export const HistoricalValuesChart: React.FC<HistoricalValuesChartProps> = ({
       tickColor: CHART_STYLES.colors.tick
     },
     yAxis: {
-      type: 'linear',
       opposite: false,
       title: {
-        text: 'Value',
+        text: 'Price',
         align: 'middle',
         rotation: -90,
         x: -10,
         style: CHART_STYLES.axisTitle
       },
       labels: {
+        formatter: function (this: { value: number }) {
+          return formatPrice(this.value);
+        },
         style: CHART_STYLES.axisLabels
       },
       gridLineColor: CHART_STYLES.colors.gridLine,
@@ -70,52 +60,48 @@ export const HistoricalValuesChart: React.FC<HistoricalValuesChartProps> = ({
     navigator: STOCK_CHART_NAVIGATOR,
     scrollbar: STOCK_CHART_SCROLLBAR,
     tooltip: {
-      shared: true,
+      shared: false,
       crosshairs: true,
       useHTML: true,
       backgroundColor: CHART_STYLES.colors.tooltipBackground,
       borderColor: CHART_STYLES.colors.tooltipBackground,
       borderRadius: 6,
       style: CHART_STYLES.tooltip,
-      formatter: function (this: any) {
-        let tooltipHTML = `<div style="font-size: 12px; color: #ffffff;"><strong>${Highcharts.dateFormat('%e %b %Y', this.x)}</strong><br/>`;
-        
-        const sortedPoints = this.points ? 
-          [...this.points].sort((a: any, b: any) => (b.y as number) - (a.y as number)) : [];
-        
-        sortedPoints.forEach((point: any) => {
-          const color = point.series.color;
-          tooltipHTML += `<span style="color:${color}">●</span> ${point.series.name}: <strong>${point.y.toFixed(4)}</strong><br/>`;
-        });
-        
-        return tooltipHTML + '</div>';
+      formatter: function (this: { x: number; y: number }) {
+        const dateStr = Highcharts.dateFormat('%e %b %Y', this.x);
+        const priceStr = formatPrice(this.y);
+        return `<div style="font-size: 12px; color: #ffffff;">
+          <strong>${dateStr}</strong><br/>
+          <span style="color:#007bff">●</span> <strong>Price:</strong> ${priceStr}
+        </div>`;
       }
     },
     plotOptions: {
       series: {
         animation: false,
-        marker: { 
+        marker: {
           enabled: false,
           states: { hover: { enabled: true, radius: 5 } }
         },
       }
     },
-    series: series,
-    legend: { 
-      enabled: assets.length > 1,
-      itemStyle: CHART_STYLES.legend,
-      itemHoverStyle: { color: '#1f2937' }
-    }
+    series: [{
+      name: ticker,
+      data: seriesData,
+      type: 'line',
+      color: '#007bff',
+      showInNavigator: true,
+    }],
+    legend: { enabled: false }
   };
 
   return (
     <Block marginTop="1.5rem">
       <HighchartsReact
         highcharts={Highcharts}
-        constructorType={'stockChart'}
+        constructorType="stockChart"
         options={chartOptions}
       />
     </Block>
   );
 };
-

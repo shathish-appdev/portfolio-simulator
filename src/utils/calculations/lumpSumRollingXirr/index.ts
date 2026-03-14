@@ -201,3 +201,81 @@ export function calculateLumpSumRollingXirr(
 
   return results;
 }
+
+// ============================================================================
+// RECALCULATE TRANSACTIONS FOR MODAL
+// ============================================================================
+
+/**
+ * Recalculate lumpsum transactions for a specific date (for modal display).
+ * Returns one buy transaction per fund at the start of the rolling period.
+ *
+ * @param navDataList - Array of NAV data for each fund
+ * @param targetDate - The specific date to recalculate for
+ * @param years - Rolling period in years
+ * @param allocations - Allocation percentages for each fund
+ * @param investmentAmount - Total lumpsum investment amount
+ * @returns Transaction array (one buy per fund), or null if calculation fails
+ */
+export function recalculateLumpsumTransactionsForDate(
+  navDataList: NavEntry[][],
+  targetDate: Date,
+  years: number,
+  allocations: number[],
+  investmentAmount: number
+): Transaction[] | null {
+  if (!isValidInput(navDataList)) return null;
+
+  const numFunds = navDataList.length;
+  const actualAllocations =
+    allocations.length === numFunds
+      ? allocations
+      : Array(numFunds).fill(100 / numFunds);
+
+  const filledNavs = navDataList.map(ensureContinuousDates);
+  const fundDateMaps = filledNavs.map(buildDateMap);
+  const sorted = getSortedDates(filledNavs[0]);
+  const firstDate = sorted[0].date;
+
+  const months = years * 12;
+  const startDate = getNthPreviousMonthDate(targetDate, months);
+
+  if (startDate < firstDate) return null;
+
+  const fundUnits = calculateFundUnits(
+    fundDateMaps,
+    startDate,
+    actualAllocations,
+    investmentAmount
+  );
+
+  if (!fundUnits) return null;
+
+  const transactions: Transaction[] = [];
+  const startKey = toDateKey(startDate);
+  const targetKey = toDateKey(targetDate);
+
+  for (let f = 0; f < numFunds; f++) {
+    const navEntry = fundDateMaps[f].get(startKey);
+    const targetNavEntry = fundDateMaps[f].get(targetKey);
+    if (!navEntry || !targetNavEntry) return null;
+
+    const allocationAmount = (investmentAmount * actualAllocations[f]) / 100;
+    const units = fundUnits[f];
+    const currentValue = units * targetNavEntry.nav;
+
+    transactions.push({
+      fundIdx: f,
+      when: startDate,
+      nav: navEntry.nav,
+      units,
+      amount: allocationAmount,
+      type: 'buy',
+      cumulativeUnits: units,
+      currentValue,
+      allocationPercentage: actualAllocations[f]
+    });
+  }
+
+  return transactions;
+}

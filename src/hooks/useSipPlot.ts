@@ -59,7 +59,7 @@ export function useSipPlot({
                   continue;
                 }
               } else if (asset.type === 'yahoo_finance') {
-                const stockData = await yahooFinanceService.fetchStockDataConverted(asset.symbol, asset.convertToINR);
+                const stockData = await yahooFinanceService.fetchStockData(asset.symbol);
                 
                 if (!stockData || stockData.length === 0) {
                   continue;

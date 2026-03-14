@@ -192,19 +192,7 @@ Only relevant for multi-asset portfolios. Disabled for single-asset portfolios.`
 **How to use:**
 1. Add assets you want to view/compare
 2. Select asset type and specific asset
-3. Click "Plot"
-
-**Logarithmic Scale:**
-Enable log scale when comparing assets with different absolute values.
-
-Example:
-- Asset A: ₹10 → ₹100 (10x growth, 900% return)
-- Asset B: ₹1000 → ₹2000 (2x growth, 100% return)
-
-On a linear chart, B looks like it grew more (₹1000 increase vs ₹90).
-On a log chart, A correctly appears as the bigger winner.
-
-Use log scale to compare actual performance, not just absolute values.`,
+3. Click "Plot"`,
   },
 
   // Supported Assets
@@ -267,11 +255,7 @@ GC=F -> Gold Futures (USD)
 GOLDBEES.BO -> Gold ETF (INR)
 
 **Finding tickers:**
-Google "[stock/index name] yahoo finance" and use the symbol shown in the page.
-
----
-
-**Note on currency:** By default, each ticker is displayed in its native currency (e.g., AAPL in USD, TCS.NS in INR). Use the **INR toggle** next to the ticker input to convert foreign-currency assets to INR using historical exchange rates. Conversion data availability depends on Yahoo Finance (e.g., USD/INR data starts from Dec 2003).`,
+Google "[stock/index name] yahoo finance" and use the symbol shown in the page.`,
   },
 
   // Understanding Charts section

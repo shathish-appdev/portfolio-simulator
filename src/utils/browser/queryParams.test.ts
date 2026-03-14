@@ -2,10 +2,11 @@ import { getQueryParams } from './queryParams';
 import { setLumpsumQueryParams } from './queryParams-lumpsum';
 import { LumpsumPortfolio } from '../../types/lumpsumPortfolio';
 
-// Mock window.location
+// Store search string for tests - getQueryParams accepts optional override
+let mockSearch = '';
+
 const mockLocation = (search: string) => {
-  delete (window as any).location;
-  (window as any).location = { search };
+  mockSearch = search.startsWith('?') ? search : `?${search}`;
 };
 
 // Mock window.history
@@ -57,7 +58,7 @@ describe('Query Params - Lumpsum Portfolios', () => {
     ];
     
     setLumpsumQueryParams(portfolios, 7, 250000);
-    const params = getQueryParams();
+    const params = getQueryParams(mockSearch);
     
     expect(params.lumpsumPortfolios).toHaveLength(2);
     expect(params.years).toBe(7);
@@ -69,7 +70,7 @@ describe('Query Params - Lumpsum Portfolios', () => {
   test('should handle all asset types', () => {
     mockLocation('lumpsumPortfolios=idx:NIFTY_50:100;fixed:8:50,inflation:IND:50');
     
-    const params = getQueryParams();
+    const params = getQueryParams(mockSearch);
     
     expect(params.lumpsumPortfolios).toHaveLength(2);
     expect(params.lumpsumPortfolios[0].selectedAssets[0].type).toBe('index_fund');
@@ -80,22 +81,21 @@ describe('Query Params - Lumpsum Portfolios', () => {
   test('should return defaults when no params exist', () => {
     mockLocation('');
     
-    const params = getQueryParams();
+    const params = getQueryParams(mockSearch);
     
     expect(params.lumpsumPortfolios).toEqual([]);
     expect(params.lumpsumAmount).toBe(100000);
   });
 
-  test('should round-trip yahoo finance with convertToINR flag', () => {
+  test('should round-trip yahoo finance assets', () => {
     const portfolios: LumpsumPortfolio[] = [
       {
         selectedAssets: [{
           type: 'yahoo_finance',
           id: '^GSPC',
-          name: '^GSPC (INR)',
+          name: '^GSPC',
           symbol: '^GSPC',
-          displayName: '^GSPC (INR)',
-          convertToINR: true
+          displayName: '^GSPC'
         }],
         allocations: [100]
       },
@@ -105,52 +105,46 @@ describe('Query Params - Lumpsum Portfolios', () => {
           id: 'AAPL',
           name: 'AAPL',
           symbol: 'AAPL',
-          displayName: 'AAPL',
-          convertToINR: false
+          displayName: 'AAPL'
         }],
         allocations: [100]
       }
     ];
 
     setLumpsumQueryParams(portfolios, 5, 100000);
-    const params = getQueryParams();
+    const params = getQueryParams(mockSearch);
 
     expect(params.lumpsumPortfolios).toHaveLength(2);
     const asset0 = params.lumpsumPortfolios[0].selectedAssets[0];
     expect(asset0.type).toBe('yahoo_finance');
     expect(asset0.symbol).toBe('^GSPC');
-    expect(asset0.convertToINR).toBe(true);
-    expect(asset0.displayName).toBe('^GSPC (INR)');
+    expect(asset0.displayName).toBe('^GSPC');
 
     const asset1 = params.lumpsumPortfolios[1].selectedAssets[0];
     expect(asset1.symbol).toBe('AAPL');
-    expect(asset1.convertToINR).toBe(false);
     expect(asset1.displayName).toBe('AAPL');
   });
 
-  test('should parse yahooinr from historical values URL', () => {
-    mockLocation('assets=yahooinr:^GSPC;yahoo:AAPL&logScale=1');
-    const params = getQueryParams();
+  test('should parse yahoo from historical values URL', () => {
+    mockLocation('assets=yahoo:^GSPC;yahoo:AAPL');
+    const params = getQueryParams(mockSearch);
 
     expect(params.assets).toHaveLength(2);
     const a0 = params.assets[0] as any;
     const a1 = params.assets[1] as any;
     expect(a0.type).toBe('yahoo_finance');
     expect(a0.symbol).toBe('^GSPC');
-    expect(a0.convertToINR).toBe(true);
     expect(a1.symbol).toBe('AAPL');
-    expect(a1.convertToINR).toBe(false);
   });
 
-  test('should parse yahooinr from SIP portfolios URL', () => {
-    mockLocation('portfolios=yahooinr:^GSPC:100|0|5|0|5&years=5&sipAmount=10000');
-    const params = getQueryParams();
+  test('should parse yahooinr from URL for backward compatibility', () => {
+    mockLocation('assets=yahooinr:^GSPC;yahoo:AAPL');
+    const params = getQueryParams(mockSearch);
 
-    expect(params.portfolios).toHaveLength(1);
-    const asset = params.portfolios[0].selectedAssets[0] as any;
-    expect(asset.type).toBe('yahoo_finance');
-    expect(asset.symbol).toBe('^GSPC');
-    expect(asset.convertToINR).toBe(true);
+    expect(params.assets).toHaveLength(2);
+    const a0 = params.assets[0] as any;
+    expect(a0.type).toBe('yahoo_finance');
+    expect(a0.symbol).toBe('^GSPC');
   });
 });
 

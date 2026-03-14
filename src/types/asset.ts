@@ -25,7 +25,6 @@ export interface YahooFinanceAsset extends BaseAsset {
   id: string;
   symbol: string;
   displayName: string;
-  convertToINR: boolean;
 }
 
 export interface FixedReturnAsset extends BaseAsset {
