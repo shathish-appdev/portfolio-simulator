@@ -12,6 +12,7 @@ import { SipSimulatorTab } from "./pages/SipSimulatorTab";
 import { HistoricalValuesTab } from "./pages/HistoricalValuesTab";
 import { StockPriceTab } from "./pages/StockPriceTab";
 import { BottomBar } from "./components/layout/BottomBar";
+import { TabBar } from "./components/layout/TabBar";
 import { HelpProvider, HelpDrawer, useHelp } from "./components/help";
 import { trackPageView } from "./utils/analytics";
 import { ToasterContainer } from "baseui/toast";
@@ -93,6 +94,7 @@ const AppContent: React.FC = () => {
         display="flex"
         flexDirection="column"
       >
+        <TabBar onHelpClick={() => openHelp("getting-started")} />
         <LoadingErrorStates loading={loading} error={error} />
 
         {/* Routes */}
