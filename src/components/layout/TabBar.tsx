@@ -9,6 +9,7 @@ const TABS = [
   { path: "/historical", label: "Historical Values" },
   { path: "/stock-price", label: "Lumpsum" },
   { path: "/stock-sip", label: "SIP (Stocks)" },
+  { path: "/stock-swp", label: "SWP (Stocks)" },
 ] as const;
 
 interface TabBarProps {

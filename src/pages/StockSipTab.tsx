@@ -193,7 +193,6 @@ export const StockSipTab: React.FC<StockSipTabProps> = () => {
   const [loading, setLoading] = useState(false);
   const [startMonth, setStartMonth] = useState<string>(defaultStartMonth);
   const [endMonth, setEndMonth] = useState<string>(defaultEndMonth);
-  const [chartKey, setChartKey] = useState(0);
 
   const isRangeInvalid = startMonth > endMonth;
 
@@ -272,7 +271,6 @@ export const StockSipTab: React.FC<StockSipTabProps> = () => {
       });
 
       setPriceDataByTicker(byTicker);
-      setChartKey((k) => k + 1);
     } catch (error) {
       console.error('Error fetching stock prices:', error);
     } finally {
@@ -560,8 +558,8 @@ export const StockSipTab: React.FC<StockSipTabProps> = () => {
 
           {portfolioValueSeries.length > 0 && (
             <>
-              <StockPortfolioValueChart key={chartKey} series={portfolioValueSeries} />
-              <StockPortfolioValueNormalizedChart key={chartKey} series={portfolioValueSeries} />
+              <StockPortfolioValueChart key="sip-portfolio-value" series={portfolioValueSeries} />
+              <StockPortfolioValueNormalizedChart key="sip-portfolio-normalized" series={portfolioValueSeries} />
             </>
           )}
 
