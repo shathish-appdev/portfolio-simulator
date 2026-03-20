@@ -1,19 +1,19 @@
-import React, { useState } from 'react';
-import xirr from 'xirr';
 import { Block } from 'baseui/block';
 import { Button } from 'baseui/button';
 import { Input } from 'baseui/input';
-import { LabelMedium, ParagraphMedium } from 'baseui/typography';
 import { Table } from 'baseui/table-semantic';
-import { LoadingOverlay } from '../components/common/LoadingOverlay';
-import { fillMissingNavDates } from '../utils/data/fillMissingNavDates';
-import { yahooFinanceService } from '../services/yahooFinanceService';
-import { StockPriceChart } from '../components/charts/StockPriceChart';
-import { StockPriceNormalizedChart } from '../components/charts/StockPriceNormalizedChart';
+import { LabelMedium, ParagraphMedium } from 'baseui/typography';
+import React, { useState } from 'react';
+import xirr from 'xirr';
 import { StockPortfolioValueChart } from '../components/charts/StockPortfolioValueChart';
 import { StockPortfolioValueNormalizedChart } from '../components/charts/StockPortfolioValueNormalizedChart';
-import { mfapiMutualFund } from '../types/mfapiMutualFund';
+import { StockPriceChart } from '../components/charts/StockPriceChart';
+import { StockPriceNormalizedChart } from '../components/charts/StockPriceNormalizedChart';
+import { LoadingOverlay } from '../components/common/LoadingOverlay';
 import { COLORS } from '../constants';
+import { yahooFinanceService } from '../services/yahooFinanceService';
+import { mfapiMutualFund } from '../types/mfapiMutualFund';
+import { fillMissingNavDates } from '../utils/data/fillMissingNavDates';
 
 function calculateXirr(
   investDate: Date,
@@ -22,12 +22,112 @@ function calculateXirr(
   endValue: number
 ): number | null {
   if (investAmount <= 0) return null;
+  if (!investDate || !endDate) return null;
+
+  // When there are only two cash flows (single investment and single redemption)
+  // we can compute the annualized return exactly instead of using a numeric
+  // solver. This is more robust for extreme returns where the solver may fail
+  // to converge.
   try {
-    return xirr([
-      { amount: -investAmount, when: investDate },
-      { amount: endValue, when: endDate },
-    ]);
+    const msPerDay = 86400000;
+    const days = (endDate.getTime() - investDate.getTime()) / msPerDay;
+    if (days <= 0) return null;
+  const years = days / 365;
+
+    // Handle zero endValue (100% loss)
+    if (endValue === 0) return -1;
+
+    const ratio = endValue / investAmount;
+    // ratio should be >= 0. If ratio is negative or NaN, fall back to numeric solver.
+    if (!isFinite(ratio) || ratio < 0) {
+      try {
+        return xirr([
+          { amount: -investAmount, when: investDate },
+          { amount: endValue, when: endDate },
+        ]);
+      } catch {
+        return null;
+      }
+    }
+
+    const annual = Math.pow(ratio, 1 / years) - 1;
+    if (!isFinite(annual) || Number.isNaN(annual)) {
+      // fallback to library if direct formula yields invalid result
+      try {
+        return xirr([
+          { amount: -investAmount, when: investDate },
+          { amount: endValue, when: endDate },
+        ]);
+      } catch {
+        return null;
+      }
+    }
+    return annual;
   } catch {
+    // final fallback to numeric solver
+    try {
+      return xirr([
+        { amount: -investAmount, when: investDate },
+        { amount: endValue, when: endDate },
+      ]);
+    } catch {
+      return null;
+    }
+  }
+}
+
+// Wrapper that logs inputs/results to help debug failing XIRR cases.
+function safeCalculateXirr(
+  investDate: Date | null,
+  investAmount: number,
+  endDate: Date | null,
+  endValue: number,
+  ctx?: { portfolioName?: string; ticker?: string }
+): number | null {
+  try {
+    if (!investDate || !endDate) {
+      console.debug('safeCalculateXirr: missing dates', { investDate, endDate, investAmount, endValue, ...ctx });
+      return null;
+    }
+    if (investAmount <= 0) {
+      console.debug('safeCalculateXirr: non-positive investAmount', { investAmount, ...ctx });
+      return null;
+    }
+    const result = calculateXirr(investDate, investAmount, endDate, endValue);
+    const msPerDay = 86400000;
+    const days = (endDate.getTime() - investDate.getTime()) / msPerDay;
+    const years365 = days / 365;
+    const years36525 = days / 365.25;
+    const ratio = investAmount !== 0 ? endValue / investAmount : NaN;
+    const percent = result == null || !isFinite(result) ? null : result * 100;
+    if (result == null || !isFinite(result)) {
+      console.debug('safeCalculateXirr: xirr returned null/invalid, attempting fallback', { result, percent, ratio, days, years365, years36525, investDate, endDate, investAmount, endValue, ...ctx });
+      // fallback: compute simple annualized return between two dates
+      try {
+        const msPerDay = 86400000;
+        const days = (endDate.getTime() - investDate.getTime()) / msPerDay;
+        if (days > 0 && endValue > 0) {
+          const years = days / 365;
+          if (investAmount !== 0) {
+            const ratio2 = endValue / investAmount;
+            if (ratio2 > 0) {
+              const fallback = Math.pow(ratio2, 1 / years) - 1;
+              console.debug('safeCalculateXirr: fallback annualized rate used', { fallback, fallbackPercent: fallback * 100, years, days, ratio: ratio2, ...ctx });
+              return fallback;
+            }
+          }
+        }
+      } catch (err) {
+        console.error('safeCalculateXirr: fallback compute error', err, { investDate, endDate, investAmount, endValue, ...ctx });
+      }
+      console.debug('safeCalculateXirr: returning null after fallback attempt', { investDate, endDate, investAmount, endValue, ...ctx });
+      return null;
+    } else {
+      console.debug('safeCalculateXirr: computed', { result, investDate, endDate, investAmount, endValue, ...ctx });
+      return result;
+    }
+  } catch (err) {
+    console.error('safeCalculateXirr: exception', err, { investDate, endDate, investAmount, endValue, ...ctx });
     return null;
   }
 }
@@ -353,16 +453,19 @@ export const StockPriceTab: React.FC<StockPriceTabProps> = () => {
     const valueDate = valueData.length > 0 ? valueData[valueData.length - 1].date : null;
 
     const summaryWithXirr = summary.map((s) => {
+      if (s.units == null) {
+        console.debug('summaryWithXirr: skipping entry with null units', { ticker: s.ticker, amount: s.amount, startPrice: s.startPrice });
+      }
       const xirrVal =
         investDate && valueDate && s.endValue != null && s.amount > 0
-          ? calculateXirr(investDate, s.amount, valueDate, s.endValue)
+          ? safeCalculateXirr(investDate, s.amount, valueDate, s.endValue, { portfolioName: p.name, ticker: s.ticker })
           : null;
       return { ...s, xirr: xirrVal };
     });
 
     const totalXirr =
       investDate && valueDate && totalInvestment > 0
-        ? calculateXirr(investDate, totalInvestment, valueDate, totalEndValue)
+        ? safeCalculateXirr(investDate, totalInvestment, valueDate, totalEndValue, { portfolioName: p.name })
         : null;
 
     return {
