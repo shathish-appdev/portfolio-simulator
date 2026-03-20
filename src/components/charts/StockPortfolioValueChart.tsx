@@ -13,6 +13,8 @@ export interface PortfolioValueSeries {
 interface StockPortfolioValueChartProps {
   data?: Array<{ date: Date; value: number }>;
   series?: PortfolioValueSeries[];
+  title?: string;
+  yAxisTitle?: string;
 }
 
 const formatPrice = (value: number): string => {
@@ -27,6 +29,8 @@ const PORTFOLIO_COLORS = ['#6366f1', '#ec4899'];
 export const StockPortfolioValueChart: React.FC<StockPortfolioValueChartProps> = ({
   data,
   series: seriesProp,
+  title: titleProp,
+  yAxisTitle: yAxisTitleProp,
 }) => {
   const isMulti = seriesProp && seriesProp.length > 0;
   const chartSeries = isMulti
@@ -47,8 +51,10 @@ export const StockPortfolioValueChart: React.FC<StockPortfolioValueChartProps> =
         }]
       : [];
 
+  const defaultTitle = isMulti ? 'Portfolio Value (Compare)' : 'Portfolio Value';
+  const defaultYAxisTitle = 'Value ($)';
   const chartOptions = {
-    title: { text: isMulti ? 'Portfolio Value (Compare)' : 'Portfolio Value' },
+    title: { text: titleProp ?? defaultTitle },
     credits: { enabled: false },
     chart: {
       backgroundColor: CHART_STYLES.colors.background,
@@ -68,7 +74,7 @@ export const StockPortfolioValueChart: React.FC<StockPortfolioValueChartProps> =
     yAxis: {
       opposite: false,
       title: {
-        text: 'Value ($)',
+        text: yAxisTitleProp ?? defaultYAxisTitle,
         align: 'middle',
         rotation: -90,
         x: -10,
@@ -135,7 +141,6 @@ export const StockPortfolioValueChart: React.FC<StockPortfolioValueChartProps> =
         highcharts={Highcharts}
         constructorType="stockChart"
         options={chartOptions}
-        immutable
       />
     </Block>
   );

@@ -134,7 +134,6 @@ export const StockPortfolioValueNormalizedChart: React.FC<StockPortfolioValueNor
         highcharts={Highcharts}
         constructorType="stockChart"
         options={chartOptions}
-        immutable
       />
     </Block>
   );

@@ -11,6 +11,8 @@ import { LumpsumSimulatorTab } from "./pages/LumpsumSimulatorTab";
 import { SipSimulatorTab } from "./pages/SipSimulatorTab";
 import { HistoricalValuesTab } from "./pages/HistoricalValuesTab";
 import { StockPriceTab } from "./pages/StockPriceTab";
+import { StockSipTab } from "./pages/StockSipTab";
+import { StockSwpTab } from "./pages/StockSwpTab";
 import { BottomBar } from "./components/layout/BottomBar";
 import { TabBar } from "./components/layout/TabBar";
 import { HelpProvider, HelpDrawer, useHelp } from "./components/help";
@@ -42,6 +44,8 @@ const AppContent: React.FC = () => {
   const isSipTab = location.pathname === "/sip";
   const isHistoricalTab = location.pathname === "/historical";
   const isStockPriceTab = location.pathname === "/stock-price";
+  const isStockSipTab = location.pathname === "/stock-sip";
+  const isStockSwpTab = location.pathname === "/stock-swp";
 
   return (
     <Container>
@@ -54,6 +58,8 @@ const AppContent: React.FC = () => {
           { label: "SIP Simulator", active: isSipTab },
           { label: "Historical Values", active: isHistoricalTab },
           { label: "Lumpsum", active: isStockPriceTab },
+          { label: "SIP (Stocks)", active: isStockSipTab },
+          { label: "SWP (Stocks)", active: isStockSwpTab },
           { label: "Help", info: { id: "help" } },
         ]}
         onMainItemSelect={(item) => {
@@ -69,6 +75,12 @@ const AppContent: React.FC = () => {
               break;
             case "Lumpsum":
               navigate("/stock-price");
+              break;
+            case "SIP (Stocks)":
+              navigate("/stock-sip");
+              break;
+            case "SWP (Stocks)":
+              navigate("/stock-swp");
               break;
             case "Help":
               openHelp("getting-started");
@@ -104,6 +116,8 @@ const AppContent: React.FC = () => {
           <Route path="/sip" element={null} />
           <Route path="/historical" element={null} />
           <Route path="/stock-price" element={null} />
+          <Route path="/stock-sip" element={null} />
+          <Route path="/stock-swp" element={null} />
           <Route path="/portfolio" element={<Navigate to="/sip" replace />} />
         </Routes>
 
@@ -132,6 +146,14 @@ const AppContent: React.FC = () => {
 
             <Block display={isStockPriceTab ? "block" : "none"} flex="1">
               <StockPriceTab funds={funds} />
+            </Block>
+
+            <Block display={isStockSipTab ? "block" : "none"} flex="1">
+              <StockSipTab funds={funds} />
+            </Block>
+
+            <Block display={isStockSwpTab ? "block" : "none"} flex="1">
+              <StockSwpTab funds={funds} />
             </Block>
           </>
         )}
