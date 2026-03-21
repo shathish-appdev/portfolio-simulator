@@ -1,6 +1,7 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { BaseProvider, LightTheme } from 'baseui';
 import { StockSipTab } from './StockSipTab';
 import { yahooFinanceService } from '../services/yahooFinanceService';
@@ -15,7 +16,11 @@ jest.mock('../components/charts/StockPortfolioValueNormalizedChart', () => ({
 const mockFunds = [{ schemeCode: 1, schemeName: 'Test' }];
 
 const renderWithBaseUI = (ui: React.ReactElement) =>
-  render(<BaseProvider theme={LightTheme}>{ui}</BaseProvider>);
+  render(
+    <MemoryRouter initialEntries={['/stock-sip']}>
+      <BaseProvider theme={LightTheme}>{ui}</BaseProvider>
+    </MemoryRouter>
+  );
 
 describe('StockSipTab', () => {
   beforeEach(() => {

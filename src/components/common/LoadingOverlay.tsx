@@ -7,7 +7,8 @@ interface LoadingOverlayProps {
   active: boolean;
 }
 
-export const LoadingOverlay: React.FC<LoadingOverlayProps> = ({ active }) => (
+export function LoadingOverlay({ active }: LoadingOverlayProps): React.ReactElement | null {
+  return (
   active ? (
     <Block
       position="absolute"
@@ -34,4 +35,5 @@ export const LoadingOverlay: React.FC<LoadingOverlayProps> = ({ active }) => (
       </Block>
     </Block>
   ) : null
-); 
+  );
+} 

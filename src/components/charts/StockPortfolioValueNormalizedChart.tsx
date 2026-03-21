@@ -27,10 +27,10 @@ function normalizeToBase100(data: Array<{ date: Date; value: number }>): Array<[
 
 const PORTFOLIO_COLORS = ['#8b5cf6', '#ec4899'];
 
-export const StockPortfolioValueNormalizedChart: React.FC<StockPortfolioValueNormalizedChartProps> = ({
+export function StockPortfolioValueNormalizedChart({
   data,
   series: seriesProp,
-}) => {
+}: StockPortfolioValueNormalizedChartProps): React.ReactElement {
   const isMulti = seriesProp && seriesProp.length > 0;
   const chartSeries = isMulti
     ? seriesProp!.map((s, i) => ({

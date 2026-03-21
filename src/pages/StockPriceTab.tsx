@@ -3,7 +3,8 @@ import { Button } from 'baseui/button';
 import { Input } from 'baseui/input';
 import { Table } from 'baseui/table-semantic';
 import { LabelMedium, ParagraphMedium } from 'baseui/typography';
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import xirr from 'xirr';
 import { StockPortfolioValueChart } from '../components/charts/StockPortfolioValueChart';
 import { StockPortfolioValueNormalizedChart } from '../components/charts/StockPortfolioValueNormalizedChart';
@@ -234,6 +235,65 @@ const INITIAL_PORTFOLIOS: PortfolioDef[] = [
   { id: 'B', name: 'Portfolio B', entries: [{ id: '2', ticker: '', amount: '' }] },
 ];
 
+/** Parse portfolios from URL: pa=ticker:amt,ticker:amt&pb=...&start=YYYY-MM-DD&end=YYYY-MM-DD */
+function parseStockPriceParams(searchParams: URLSearchParams): {
+  portfolios: PortfolioDef[];
+  startDate: string;
+  endDate: string;
+} | null {
+  const pa = searchParams.get('pa');
+  const pb = searchParams.get('pb');
+  const start = searchParams.get('start');
+  const end = searchParams.get('end');
+  if (!pa && !pb && !start && !end) return null;
+
+  const parseEntries = (s: string | null): PortfolioEntry[] => {
+    if (!s?.trim()) return [{ id: crypto.randomUUID?.() ?? String(Date.now()), ticker: '', amount: '' }];
+    const parsed = s.split(',').map((part) => {
+      const colon = part.indexOf(':');
+      const ticker = colon >= 0 ? part.slice(0, colon).trim() : part.trim();
+      const amount = colon >= 0 ? part.slice(colon + 1).trim() : '';
+      return {
+        id: crypto.randomUUID?.() ?? String(Date.now() + Math.random()),
+        ticker: ticker.toUpperCase(),
+        amount: amount.replace(/[^0-9.]/g, ''),
+      };
+    }).filter((e) => e.ticker || e.amount);
+    return parsed.length ? parsed : [{ id: crypto.randomUUID?.() ?? String(Date.now()), ticker: '', amount: '' }];
+  };
+
+  const entriesA = parseEntries(pa);
+  const entriesB = parseEntries(pb);
+  if (entriesA.length === 0 && entriesB.length === 0 && !start && !end) return null;
+
+  return {
+    portfolios: [
+      { id: 'A', name: 'Portfolio A', entries: entriesA.length ? entriesA : [{ id: crypto.randomUUID?.() ?? '1', ticker: '', amount: '' }] },
+      { id: 'B', name: 'Portfolio B', entries: entriesB.length ? entriesB : [{ id: crypto.randomUUID?.() ?? '2', ticker: '', amount: '' }] },
+    ],
+    startDate: start && /^\d{4}-\d{2}-\d{2}$/.test(start) ? start : defaultStartDate(),
+    endDate: end && /^\d{4}-\d{2}-\d{2}$/.test(end) ? end : defaultEndDate(),
+  };
+}
+
+/** Serialize state to URL params */
+function serializeStockPriceParams(
+  portfolios: PortfolioDef[],
+  startDate: string,
+  endDate: string
+): URLSearchParams {
+  const params = new URLSearchParams();
+  const entriesToStr = (entries: PortfolioEntry[]) =>
+    entries.filter((e) => e.ticker.trim() || parseFloat(e.amount) > 0).map((e) => `${e.ticker}:${e.amount}`).join(',');
+  const pa = entriesToStr(portfolios[0]?.entries ?? []);
+  const pb = entriesToStr(portfolios[1]?.entries ?? []);
+  if (pa) params.set('pa', pa);
+  if (pb) params.set('pb', pb);
+  params.set('start', startDate);
+  params.set('end', endDate);
+  return params;
+}
+
 interface StockPriceTabProps {
   funds: mfapiMutualFund[];
   loadNavData?: (asset: any) => Promise<any[]>;
@@ -309,18 +369,34 @@ function PortfolioSection({
 }
 
 export const StockPriceTab: React.FC<StockPriceTabProps> = () => {
-  const [portfolios, setPortfolios] = useState<PortfolioDef[]>(() =>
-    INITIAL_PORTFOLIOS.map((p) => ({
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const initialFromUrl = useMemo(() => parseStockPriceParams(searchParams), [searchParams.toString()]);
+  const [portfolios, setPortfolios] = useState<PortfolioDef[]>(() => {
+    if (initialFromUrl) return initialFromUrl.portfolios;
+    return INITIAL_PORTFOLIOS.map((p) => ({
       ...p,
       entries: p.entries.map((e) => ({ ...e, id: crypto.randomUUID?.() ?? String(Date.now() + Math.random()) })),
-    }))
-  );
+    }));
+  });
   const [priceDataByTicker, setPriceDataByTicker] = useState<
     Record<string, Array<{ date: Date; nav: number }>>
   >({});
   const [loading, setLoading] = useState(false);
-  const [startDate, setStartDate] = useState<string>(defaultStartDate);
-  const [endDate, setEndDate] = useState<string>(defaultEndDate);
+  const [startDate, setStartDate] = useState<string>(
+    () => initialFromUrl?.startDate ?? defaultStartDate()
+  );
+  const [endDate, setEndDate] = useState<string>(
+    () => initialFromUrl?.endDate ?? defaultEndDate()
+  );
+
+  useEffect(() => {
+    if (initialFromUrl) {
+      setPortfolios(initialFromUrl.portfolios);
+      setStartDate(initialFromUrl.startDate);
+      setEndDate(initialFromUrl.endDate);
+    }
+  }, [searchParams.toString()]);
   const [chartKey, setChartKey] = useState(0);
 
   const isDateRangeInvalid = new Date(startDate) > new Date(endDate);
@@ -413,6 +489,7 @@ export const StockPriceTab: React.FC<StockPriceTabProps> = () => {
 
       setPriceDataByTicker(byTicker);
       setChartKey((k) => k + 1);
+      setSearchParams(serializeStockPriceParams(portfolios, startDate, endDate), { replace: true });
     } catch (error) {
       console.error('Error fetching stock prices:', error);
     } finally {

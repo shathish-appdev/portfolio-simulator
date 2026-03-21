@@ -26,12 +26,12 @@ const formatPrice = (value: number): string => {
 
 const PORTFOLIO_COLORS = ['#6366f1', '#ec4899'];
 
-export const StockPortfolioValueChart: React.FC<StockPortfolioValueChartProps> = ({
+export function StockPortfolioValueChart({
   data,
   series: seriesProp,
   title: titleProp,
   yAxisTitle: yAxisTitleProp,
-}) => {
+}: StockPortfolioValueChartProps): React.ReactElement {
   const isMulti = seriesProp && seriesProp.length > 0;
   const chartSeries = isMulti
     ? seriesProp!.map((s, i) => ({

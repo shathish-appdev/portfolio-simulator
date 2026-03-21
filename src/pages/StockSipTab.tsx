@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import xirr from 'xirr';
 import { Block } from 'baseui/block';
 import { Button } from 'baseui/button';
@@ -96,6 +97,64 @@ const INITIAL_PORTFOLIOS: PortfolioDef[] = [
   { id: 'B', name: 'Portfolio B', entries: [{ id: '2', ticker: '', amount: '' }] },
 ];
 
+/** Parse from URL: pa=ticker:amt,ticker:amt&pb=...&startMonth=YYYY-MM&endMonth=YYYY-MM */
+function parseStockSipParams(searchParams: URLSearchParams): {
+  portfolios: PortfolioDef[];
+  startMonth: string;
+  endMonth: string;
+} | null {
+  const pa = searchParams.get('pa');
+  const pb = searchParams.get('pb');
+  const startMonth = searchParams.get('startMonth');
+  const endMonth = searchParams.get('endMonth');
+  if (!pa && !pb && !startMonth && !endMonth) return null;
+
+  const parseEntries = (s: string | null): PortfolioEntry[] => {
+    if (!s?.trim()) return [{ id: crypto.randomUUID?.() ?? String(Date.now()), ticker: '', amount: '' }];
+    const parsed = s.split(',').map((part) => {
+      const colon = part.indexOf(':');
+      const ticker = colon >= 0 ? part.slice(0, colon).trim() : part.trim();
+      const amount = colon >= 0 ? part.slice(colon + 1).trim() : '';
+      return {
+        id: crypto.randomUUID?.() ?? String(Date.now() + Math.random()),
+        ticker: ticker.toUpperCase(),
+        amount: amount.replace(/[^0-9.]/g, ''),
+      };
+    }).filter((e) => e.ticker || e.amount);
+    return parsed.length ? parsed : [{ id: crypto.randomUUID?.() ?? String(Date.now()), ticker: '', amount: '' }];
+  };
+
+  const entriesA = parseEntries(pa);
+  const entriesB = parseEntries(pb);
+  if (entriesA.length === 0 && entriesB.length === 0 && !startMonth && !endMonth) return null;
+
+  return {
+    portfolios: [
+      { id: 'A', name: 'Portfolio A', entries: entriesA.length ? entriesA : [{ id: crypto.randomUUID?.() ?? '1', ticker: '', amount: '' }] },
+      { id: 'B', name: 'Portfolio B', entries: entriesB.length ? entriesB : [{ id: crypto.randomUUID?.() ?? '2', ticker: '', amount: '' }] },
+    ],
+    startMonth: startMonth && /^\d{4}-\d{2}$/.test(startMonth) ? startMonth : defaultStartMonth(),
+    endMonth: endMonth && /^\d{4}-\d{2}$/.test(endMonth) ? endMonth : defaultEndMonth(),
+  };
+}
+
+function serializeStockSipParams(
+  portfolios: PortfolioDef[],
+  startMonth: string,
+  endMonth: string
+): URLSearchParams {
+  const params = new URLSearchParams();
+  const entriesToStr = (entries: PortfolioEntry[]) =>
+    entries.filter((e) => e.ticker.trim() || parseFloat(e.amount) > 0).map((e) => `${e.ticker}:${e.amount}`).join(',');
+  const pa = entriesToStr(portfolios[0]?.entries ?? []);
+  const pb = entriesToStr(portfolios[1]?.entries ?? []);
+  if (pa) params.set('pa', pa);
+  if (pb) params.set('pb', pb);
+  params.set('startMonth', startMonth);
+  params.set('endMonth', endMonth);
+  return params;
+}
+
 interface StockSipTabProps {
   funds: mfapiMutualFund[];
 }
@@ -180,19 +239,31 @@ function PortfolioSection({
   );
 }
 
-export const StockSipTab: React.FC<StockSipTabProps> = () => {
-  const [portfolios, setPortfolios] = useState<PortfolioDef[]>(() =>
-    INITIAL_PORTFOLIOS.map((p) => ({
+export function StockSipTab(_props: StockSipTabProps): React.ReactElement {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialFromUrl = useMemo(() => parseStockSipParams(searchParams), [searchParams.toString()]);
+
+  const [portfolios, setPortfolios] = useState<PortfolioDef[]>(() => {
+    if (initialFromUrl) return initialFromUrl.portfolios;
+    return INITIAL_PORTFOLIOS.map((p) => ({
       ...p,
       entries: p.entries.map((e) => ({ ...e, id: crypto.randomUUID?.() ?? String(Date.now() + Math.random()) })),
-    }))
-  );
+    }));
+  });
   const [priceDataByTicker, setPriceDataByTicker] = useState<
     Record<string, Array<{ date: Date; nav: number }>>
   >({});
   const [loading, setLoading] = useState(false);
-  const [startMonth, setStartMonth] = useState<string>(defaultStartMonth);
-  const [endMonth, setEndMonth] = useState<string>(defaultEndMonth);
+  const [startMonth, setStartMonth] = useState<string>(() => initialFromUrl?.startMonth ?? defaultStartMonth());
+  const [endMonth, setEndMonth] = useState<string>(() => initialFromUrl?.endMonth ?? defaultEndMonth());
+
+  useEffect(() => {
+    if (initialFromUrl) {
+      setPortfolios(initialFromUrl.portfolios);
+      setStartMonth(initialFromUrl.startMonth);
+      setEndMonth(initialFromUrl.endMonth);
+    }
+  }, [searchParams.toString()]);
 
   const isRangeInvalid = startMonth > endMonth;
 
@@ -271,6 +342,7 @@ export const StockSipTab: React.FC<StockSipTabProps> = () => {
       });
 
       setPriceDataByTicker(byTicker);
+      setSearchParams(serializeStockSipParams(portfolios, startMonth, endMonth), { replace: true });
     } catch (error) {
       console.error('Error fetching stock prices:', error);
     } finally {
@@ -624,4 +696,4 @@ export const StockSipTab: React.FC<StockSipTabProps> = () => {
       )}
     </Block>
   );
-};
+}

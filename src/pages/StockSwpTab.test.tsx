@@ -1,6 +1,7 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { BaseProvider, LightTheme } from 'baseui';
 import { StockSwpTab } from './StockSwpTab';
 import { yahooFinanceService } from '../services/yahooFinanceService';
@@ -14,7 +15,11 @@ jest.mock('../components/charts/StockPortfolioValueChart', () => ({
 const mockFunds = [{ schemeCode: 1, schemeName: 'Test' }];
 
 const renderWithBaseUI = (ui: React.ReactElement) =>
-  render(<BaseProvider theme={LightTheme}>{ui}</BaseProvider>);
+  render(
+    <MemoryRouter initialEntries={['/stock-swp']}>
+      <BaseProvider theme={LightTheme}>{ui}</BaseProvider>
+    </MemoryRouter>
+  );
 
 describe('StockSwpTab', () => {
   beforeEach(() => {

@@ -2,14 +2,9 @@ import React, { useEffect } from "react";
 import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { Container } from "./components/common/Container";
 import { useMutualFunds } from "./hooks/useMutualFunds";
-import { useNavData } from "./hooks/useNavData";
-import { useAssetNavData } from "./hooks/useAssetNavData";
 import { Block } from "baseui/block";
 import { LoadingErrorStates } from "./components/common/LoadingErrorStates";
 import { AppNavBar } from "baseui/app-nav-bar";
-import { LumpsumSimulatorTab } from "./pages/LumpsumSimulatorTab";
-import { SipSimulatorTab } from "./pages/SipSimulatorTab";
-import { HistoricalValuesTab } from "./pages/HistoricalValuesTab";
 import { StockPriceTab } from "./pages/StockPriceTab";
 import { StockSipTab } from "./pages/StockSipTab";
 import { StockSwpTab } from "./pages/StockSwpTab";
@@ -22,8 +17,6 @@ import { setGlobalOpenHelp } from "./services/yahooFinanceService";
 
 const AppContent: React.FC = () => {
   const { funds, loading, error } = useMutualFunds();
-  const { loadNavData } = useNavData();
-  const { loadNavData: loadAssetNavData } = useAssetNavData();
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -40,9 +33,6 @@ const AppContent: React.FC = () => {
   }, [openHelp]);
 
   // Active tab detection
-  const isLumpsumTab = location.pathname === "/lumpsum";
-  const isSipTab = location.pathname === "/sip";
-  const isHistoricalTab = location.pathname === "/historical";
   const isStockPriceTab = location.pathname === "/stock-price";
   const isStockSipTab = location.pathname === "/stock-sip";
   const isStockSwpTab = location.pathname === "/stock-swp";
@@ -54,9 +44,6 @@ const AppContent: React.FC = () => {
       <AppNavBar
         title="Portfolio Simulator"
         mainItems={[
-          { label: "Lumpsum Simulator", active: isLumpsumTab },
-          { label: "SIP Simulator", active: isSipTab },
-          { label: "Historical Values", active: isHistoricalTab },
           { label: "Lumpsum", active: isStockPriceTab },
           { label: "SIP (Stocks)", active: isStockSipTab },
           { label: "SWP (Stocks)", active: isStockSwpTab },
@@ -64,15 +51,6 @@ const AppContent: React.FC = () => {
         ]}
         onMainItemSelect={(item) => {
           switch (item.label) {
-            case "Lumpsum Simulator":
-              navigate("/lumpsum");
-              break;
-            case "SIP Simulator":
-              navigate("/sip");
-              break;
-            case "Historical Values":
-              navigate("/historical");
-              break;
             case "Lumpsum":
               navigate("/stock-price");
               break;
@@ -111,39 +89,18 @@ const AppContent: React.FC = () => {
 
         {/* Routes */}
         <Routes>
-          <Route path="/" element={<Navigate to="/lumpsum" replace />} />
-          <Route path="/lumpsum" element={null} />
-          <Route path="/sip" element={null} />
-          <Route path="/historical" element={null} />
+          <Route path="/" element={<Navigate to="/stock-price" replace />} />
+          <Route path="/lumpsum" element={<Navigate to="/stock-price" replace />} />
+          <Route path="/sip" element={<Navigate to="/stock-price" replace />} />
+          <Route path="/historical" element={<Navigate to="/stock-price" replace />} />
           <Route path="/stock-price" element={null} />
           <Route path="/stock-sip" element={null} />
           <Route path="/stock-swp" element={null} />
-          <Route path="/portfolio" element={<Navigate to="/sip" replace />} />
+          <Route path="/portfolio" element={<Navigate to="/stock-price" replace />} />
         </Routes>
 
         {!loading && !error && funds.length > 0 && (
           <>
-            <Block display={isLumpsumTab ? "block" : "none"} flex="1">
-              <LumpsumSimulatorTab
-                funds={funds}
-                loadNavData={loadNavData}
-              />
-            </Block>
-
-            <Block display={isSipTab ? "block" : "none"} flex="1">
-              <SipSimulatorTab
-                funds={funds}
-                loadNavData={loadNavData}
-              />
-            </Block>
-
-            <Block display={isHistoricalTab ? "block" : "none"} flex="1">
-              <HistoricalValuesTab
-                funds={funds}
-                loadNavData={loadAssetNavData}
-              />
-            </Block>
-
             <Block display={isStockPriceTab ? "block" : "none"} flex="1">
               <StockPriceTab funds={funds} />
             </Block>

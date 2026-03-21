@@ -4,9 +4,6 @@ import { Block } from "baseui/block";
 import { useStyletron } from "baseui";
 
 const TABS = [
-  { path: "/lumpsum", label: "Lumpsum Simulator" },
-  { path: "/sip", label: "SIP Simulator" },
-  { path: "/historical", label: "Historical Values" },
   { path: "/stock-price", label: "Lumpsum" },
   { path: "/stock-sip", label: "SIP (Stocks)" },
   { path: "/stock-swp", label: "SWP (Stocks)" },

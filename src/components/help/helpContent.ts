@@ -7,40 +7,32 @@ export const helpContent: Record<string, HelpTopic> = {
   // Getting Started
   'getting-started': {
     title: 'Getting Started',
-    content: `An investment analysis tool for Indian markets that lets you simulate and compare investment portfolios using historical data.
+    content: `A portfolio simulator that lets you compare investments using historical stock and index data from Yahoo Finance.
 
 **Features:**
-- Lumpsum investment simulation
-- SIP (Systematic Investment Plan) simulation
-- Historical NAV comparison
+- **Lumpsum:** Compare one-time investments across two portfolios (e.g., TSLA vs NVDA)
+- **SIP (Stocks):** Simulate monthly investments and compare two portfolios
+- **SWP (Stocks):** Simulate systematic withdrawals with different strategies
 
 **Use it to:**
-- Backtest investment portfolios
-- Compare assets (mutual funds, indices, etc.)
-- Understand rolling returns and volatility`,
+- Backtest stock and index investments
+- Compare how different portfolios would have performed
+- Evaluate withdrawal strategies for retirement or income`,
   },
 
   'portfolios-assets': {
     title: 'Portfolios & Assets',
-    content: `**Asset:**
-A single investable asset — a mutual fund, an index, a stock, etc.
+    content: `**Portfolio:**
+A list of stocks or indices with investment amounts. You can add multiple tickers per portfolio (e.g., Portfolio A: TSLA $5000 + AAPL $5000).
 
-**Portfolio:**
-A combination of one or more assets with allocation percentages.
+**Comparing portfolios:**
+Build Portfolio A and Portfolio B side by side to compare performance. Each appears as a separate line on the chart.
 
-**Examples:**
-- Single-asset portfolio: 100% NIFTY 50
-- Multi-asset portfolio: 70% Equity Fund + 30% Debt Fund
+**Ticker format:**
+Use Yahoo Finance symbols (e.g., AAPL, TSLA, NVDA, ^GSPC). Indian stocks use .NS (NSE) or .BO (BSE) suffix.
 
-**Why portfolios?**
-You can compare different approaches side by side:
-- Portfolio 1: Pure equity (100% NIFTY 50)
-- Portfolio 2: Balanced (70% equity + 30% debt)
-- Portfolio 3: Diversified (60% equity + 30% debt + 10% gold)
-
-Each portfolio appears as a separate line on the chart.
-
-**Important:** Allocations within a portfolio must add up to exactly 100%. The app shows a warning if they don't.`,
+**Synthetic benchmarks:**
+Use ~12 for a 12% fixed return, ~TARGET_RATE for 12%, or ~TARGET_RATE:10 for 10% — useful for comparing against a target.`,
   },
 
   'xirr-explained': {
@@ -52,175 +44,92 @@ Each portfolio appears as a separate line on the chart.
 - XIRR handles multiple investments at different times (like SIP)
 
 **Example:**
-If you invested ₹10,000/month for 5 years and your corpus is ₹8,50,000, XIRR tells you the effective annual return considering each monthly investment date.`,
-  },
-
-  'why-rolling': {
-    title: 'Why Rolling Returns?',
-    content: `Most websites show only a few return values: 1Y, 3Y, 5Y returns from today.
-
-**The problem:**
-These are just single data points. An asset showing 15% 5Y return today might have shown 8% last year and 22% the year before. You're seeing a snapshot, not the full picture.
-
-**Rolling returns show everything:**
-Instead of one 5-year return, you see ALL possible 5-year returns the asset has generated. Every point on the chart is a return for a different start date.
-
-**What you can learn:**
-- **Consistency:** Is the asset reliably good, or just lucky timing?
-- **Range:** What's the best and worst case?
-- **Probability:** How often did the asset beat X%?
-
-**Example:**
-An asset's 5Y return today is 12%. But rolling returns show it ranged from 6% to 18% over the last decade. Now you know what to realistically expect.`,
+If you invested $10,000/month for 5 years and your corpus is $850,000, XIRR tells you the effective annual return considering each monthly investment date.`,
   },
 
   'url-sharing': {
     title: 'URL Sharing',
-    content: `Your entire setup is automatically saved to the URL.
-
-**What's saved:**
-- All portfolios and their assets
-- Allocation percentages
-- Investment amount and duration
-- Settings like step-up, rebalancing, log scale
+    content: `Your setup (portfolios, tickers, amounts, date range) may be saved to the URL depending on the page.
 
 **How to use:**
-- Just copy the URL from your browser's address bar
-- Share it with anyone — they'll see your exact setup
+- Copy the URL from your browser's address bar
+- Share it so others see your exact setup
 - Bookmark it to save your analysis for later
 
-No login or account needed. The URL is your saved state.`,
+No login or account needed.`,
   },
 
-  // Lumpsum Simulator
-  'lumpsum-simulator': {
-    title: 'Lumpsum Simulator',
-    content: `Simulates a one-time investment over historical periods.
+  // Lumpsum (Stocks)
+  'lumpsum': {
+    title: 'Lumpsum',
+    content: `Compare two portfolios of one-time (lumpsum) investments using historical price data.
 
 **How to use:**
-1. Add portfolios (each can have multiple assets with allocations)
-2. Select assets (mutual funds, indices, etc.)
-3. Set investment amount and period (years)
-4. Click "Plot" to see results
+1. Add stocks to Portfolio A and/or B (ticker + investment amount)
+2. Pick start and end dates
+3. Click "Plot"
 
-**Reading the chart (example: 3-year, point on 10-Jan-2023):**
-You invested ₹x once on 10-Jan-2020.
-- **XIRR View:** Point = annualized return (CAGR) for this period
-- **Corpus View:** Point = final portfolio value in ₹
+**Results:**
+- **Price Chart:** Raw price over time (start = 1)
+- **Portfolio Value Chart:** Total value in $ over time
+- **Table:** Investment, units bought, end value, return %, and XIRR (annualized return)
 
-Shows all possible returns/values for any 3-year lumpsum in this portfolio.
-
-**Multi-asset portfolios:**
-Allocate across multiple assets (e.g., 70% equity, 30% debt) to see combined performance.
-
-**Transaction Details:**
-Click any point on the chart to see the complete transaction history — every buy with date, NAV, units, and amount.`,
+**Synthetic benchmarks:**
+Use ~12 for 12% fixed return, ~TARGET_RATE for 12%, or ~TARGET_RATE:10 for 10% — to compare against a target.`,
   },
 
-  // SIP Simulator
-  'sip-simulator': {
-    title: 'SIP Simulator',
-    content: `Simulates monthly SIP investments over historical periods.
+  // SIP (Stocks)
+  'sip-stocks': {
+    title: 'SIP (Stocks)',
+    content: `Simulate monthly investments into stocks and compare two portfolios.
 
 **How to use:**
-1. Add portfolios with asset allocations
-2. Enable step-up or rebalancing if needed
-3. Select period and click "Plot"
+1. Add stocks to Portfolio A and/or B (ticker + monthly amount)
+2. Select start and end month
+3. Click "Plot"
 
-**Reading the chart (example: 3-year, point on 10-Jan-2023):**
-You invested ₹x monthly from 10-Jan-2020 to 10-Dec-2022 (36 investments).
-- **XIRR View:** Point = XIRR return of this SIP
-- **Corpus View:** Point = final portfolio value in ₹
+**Results:**
+- **Price Chart:** Price over time (start = 1)
+- **Portfolio Value Chart:** Cumulative value in $ over time
+- **Table:** For each month: price, units bought, accumulated units; final XIRR
 
-Shows all possible returns/values for any 3-year SIP in this portfolio.
-
-**Multi-asset SIP:**
-Your monthly amount is split across assets based on allocation percentages.
-
-**Transaction Details:**
-Click any point on the chart to see complete transaction history — all monthly investments, rebalances (if enabled), with dates, NAV, units, and amounts.`,
+**Synthetic benchmarks:**
+Use ~12, ~TARGET_RATE, or ~TARGET_RATE:10 to compare against a fixed return target.`,
   },
 
-  'sip-stepup': {
-    title: 'Step-up SIP',
-    content: `Increases your monthly SIP amount by a fixed percentage every year.
-
-**Example (10% step-up, SIP started 15-Mar-2020):**
-- Mar 2020 to Feb 2021: ₹10,000/month
-- Mar 2021 to Feb 2022: ₹11,000/month (increased on 15-Mar-2021)
-- Mar 2022 to Feb 2023: ₹12,100/month (increased on 15-Mar-2022)
-
-Step-up kicks in on each year anniversary of your SIP start date.
-
-**Why use it?**
-- Matches income growth
-- Accelerates wealth building
-- Combats inflation`,
-  },
-
-  'sip-rebalancing': {
-    title: 'Rebalancing',
-    content: `Rebalancing restores your portfolio to target allocations when they drift beyond a threshold.
-
-**When does it happen?**
-Checked on each SIP date (monthly), after your regular SIP investment is made.
-
-**Order of operations on each SIP date:**
-1. Regular SIP buy happens first (split by allocation %)
-2. Portfolio is checked for drift
-3. If any asset drifts beyond threshold → rebalance triggers
-
-**Example (70:30 target, 5% threshold):**
-- After SIP, equity is at 76%, debt at 24%
-- Drift = 6% (exceeds 5% threshold)
-- System sells equity, buys debt to restore 70:30
-
-**Note:**
-Only relevant for multi-asset portfolios. Disabled for single-asset portfolios.`,
-  },
-
-  // Historical Values
-  'historical-values': {
-    title: 'Historical Values',
-    content: `View and compare historical NAV of assets on a single chart.
-
-**Use it to:**
-- Check raw NAV values of any asset
-- Find when an asset started (first available date)
-- Compare growth of multiple assets over time
+  // SWP (Stocks)
+  'swp-stocks': {
+    title: 'SWP (Stocks)',
+    content: `Simulate systematic withdrawals from a stock portfolio and compare two withdrawal strategies.
 
 **How to use:**
-1. Add assets you want to view/compare
-2. Select asset type and specific asset
-3. Click "Plot"`,
+1. Add a ticker and starting corpus (total amount invested)
+2. Define Strategy A and Strategy B:
+   - **Fixed $/month:** Withdraw the same amount each month
+   - **Fixed $ + growth %/month:** Start with an amount, increase by % each month
+   - **% of portfolio/month:** Withdraw a percentage of current value each month
+3. Select date range and click "Plot"
+
+**Results:**
+- **Portfolio Value Chart:** How your corpus changes over time
+- **Withdrawal Chart:** Amount withdrawn each month
+- **Table:** Month-by-month breakdown
+
+Useful for retirement planning or evaluating income strategies.`,
   },
 
   // Supported Assets
   'data-sources': {
-    title: 'Supported Assets',
-    content: `**Mutual Funds:**
-All AMFI-registered Indian mutual funds.
-Source: [MFAPI](https://mfapi.in), updated daily.
+    title: 'Data Source',
+    content: `**Yahoo Finance:**
+All price data comes from [Yahoo Finance](https://finance.yahoo.com). Supports:
+- **Stocks:** US (AAPL, TSLA), Indian (TCS.NS, RELIANCE.BO), and global
+- **Indices:** ^GSPC (S&P 500), ^NSEI (NIFTY 50), ^IXIC (NASDAQ)
+- **ETFs**
+- **Commodities:** GC=F (gold), BTC-USD (crypto)
 
-**Index Funds:**
-NIFTY 50, SENSEX, and other indices.
-Primary source: [NSE India](https://www.niftyindices.com/reports/historical-data). Since the official site can sometimes be unreliable, index data is periodically backed up to [this repository](https://github.com/asrajavel/mf-index-data) (updated quarterly). We read from this backup, so you might not see the latest data.
-
-**Yahoo Finance:**
-Any ticker available on Yahoo Finance — stocks, global indices, ETFs.
-
-**Fixed Return:**
-Synthetic benchmark showing a fixed annual return (e.g., 8% p.a.).
-Useful for comparing against guaranteed return assets.
-
-**Inflation:**
-CPI-based data showing how money loses value over time.
-Source: [World Bank](https://data.worldbank.org/indicator/FP.CPI.TOTL.ZG?locations=IN) (Consumer Price Index).
-Use to understand real (inflation-adjusted) returns.
-
----
-
-Note: NAV data is only available on trading days. For weekends/holidays, the next available NAV is used to fill the gap, ensuring continuous date coverage for calculations.`,
+**Synthetic benchmarks:**
+Use ~12 for 12% fixed return, ~TARGET_RATE for 12%, or ~TARGET_RATE:10 for 10%. These simulate a hypothetical asset growing at that rate.`,
   },
 
   'yahoo-tickers': {
@@ -258,80 +167,17 @@ GOLDBEES.BO -> Gold ETF (INR)
 Google "[stock/index name] yahoo finance" and use the symbol shown in the page.`,
   },
 
-  // Understanding Charts section
+  // Understanding Charts
   'understanding-charts': {
     title: 'Understanding Charts',
-    content: `The simulators generate several charts to help you analyze performance. These charts work the same for both Lumpsum and SIP.
+    content: `**Price Chart (normalized):**
+Shows price over time with start = 1. Lets you compare growth of different tickers on the same scale.
 
-**Rolling Returns Chart:**
-Shows returns for every possible investment window. Each point = return if you ended on that date.
+**Portfolio Value Chart:**
+Shows total portfolio value in $ over time. For lumpsum, it's invested amount × price change. For SIP, it adds up units bought each month × current price.
 
-**Distribution Histogram:**
-Groups rolling returns into 20 buckets. Shows what % of returns fell in each range (per portfolio).
-
-**Volatility Chart:**
-Shows annualized volatility (%) for each rolling period — how risky the investment was.`,
-  },
-
-  'rolling-xirr': {
-    title: 'Rolling Returns Chart',
-    content: `Shows returns for every possible investment window of the selected duration.
-
-**What each point means:**
-"If my investment ended on this date after X years, what would my return be?"
-
-**What to look for:**
-- **Consistency:** Flat line = stable returns across time
-- **Range:** Gap between best and worst = risk indicator
-- **Trends:** Upward/downward patterns over market cycles
-
-Helps answer: "What's the probability of achieving X% returns?"`,
-  },
-
-  'histogram': {
-    title: 'Distribution Histogram',
-    content: `Groups all rolling returns into 20 buckets and shows what percentage fell in each range.
-
-**How to read it:**
-- X-axis: Return ranges (buckets are auto-calculated based on min/max)
-- Y-axis: Percentage of returns in that range
-- For each portfolio, its bars add up to 100%
-- Taller bar = more common outcome for that portfolio
-
-**What to look for:**
-- **Peak location:** Where most returns cluster (expected outcome)
-- **Spread:** Wide = unpredictable, narrow = consistent
-- **Left tail:** What % of returns were negative/low
-
-**Example:**
-If Portfolio A's 10-12% bar shows 25%, it means 25% of all historical returns for Portfolio A fell in 10-12%.
-
-**Note:** The distribution is only meaningful if you have enough data points. If the date range is short, you'll have fewer rolling periods, making the distribution less reliable. For example, a 5-year rolling analysis on 6 years of data gives very few data points.`,
-  },
-
-  'volatility': {
-    title: 'Volatility Chart',
-    content: `Shows annualized volatility (%) for each rolling period — a measure of risk.
-
-**How it's calculated:**
-1. Take daily portfolio values during the investment period
-2. Calculate daily returns (% change each day)
-3. On SIP days, cash flow is excluded so only market movement counts
-4. Weekends/holidays are skipped (no artificial zero returns)
-5. Standard deviation of daily returns × √(~252 trading days/year) = annualized volatility
-
-**What each point means:**
-"If my investment ended on this date, how volatile was the ride?"
-
-**Reading the chart:**
-- Higher % = more volatile = riskier
-- Lower % = steadier = less risky
-- Compare portfolios to see which had a smoother ride
-
-**Use it to:**
-- Understand the risk you'd have experienced
-- Compare risk profiles of different portfolios
-- See if volatility changed over market cycles`,
+**SWP Withdrawal Chart:**
+Shows the amount withdrawn each month under your chosen strategy.`,
   },
 };
 
@@ -339,26 +185,26 @@ If Portfolio A's 10-12% bar shows 25%, it means 25% of all historical returns fo
 export const getTopicsByCategory = () => ({
   'Getting Started': {
     topicId: 'getting-started',
-    subTopics: ['portfolios-assets', 'xirr-explained', 'why-rolling', 'url-sharing'],
+    subTopics: ['portfolios-assets', 'xirr-explained', 'url-sharing'],
   },
-  'Supported Assets': {
+  'Data Source': {
     topicId: 'data-sources',
     subTopics: ['yahoo-tickers'],
   },
   'Understanding Charts': {
     topicId: 'understanding-charts',
-    subTopics: ['rolling-xirr', 'histogram', 'volatility'],
-  },
-  'Lumpsum Simulator': {
-    topicId: 'lumpsum-simulator',
     subTopics: [],
   },
-  'SIP Simulator': {
-    topicId: 'sip-simulator',
-    subTopics: ['sip-stepup', 'sip-rebalancing'],
+  'Lumpsum': {
+    topicId: 'lumpsum',
+    subTopics: [],
   },
-  'Historical Values': {
-    topicId: 'historical-values',
+  'SIP (Stocks)': {
+    topicId: 'sip-stocks',
+    subTopics: [],
+  },
+  'SWP (Stocks)': {
+    topicId: 'swp-stocks',
     subTopics: [],
   },
 });

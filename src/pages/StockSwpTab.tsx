@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Block } from 'baseui/block';
 import { Button } from 'baseui/button';
 import { Input } from 'baseui/input';
@@ -117,6 +118,77 @@ function defaultEndMonth(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
+/** Parse from URL: corpus=t:amt,t:amt&startMonth=...&endMonth=...&strategyA=type:amt:growth&strategyB=... */
+function parseStockSwpParams(searchParams: URLSearchParams): {
+  corpusEntries: CorpusEntry[];
+  startMonth: string;
+  endMonth: string;
+  strategyA: WithdrawalStrategy;
+  strategyB: WithdrawalStrategy;
+} | null {
+  const corpus = searchParams.get('corpus');
+  const startMonth = searchParams.get('startMonth');
+  const endMonth = searchParams.get('endMonth');
+  const sa = searchParams.get('strategyA');
+  const sb = searchParams.get('strategyB');
+  if (!corpus && !startMonth && !endMonth && !sa && !sb) return null;
+
+  const parseCorpus = (s: string | null): CorpusEntry[] => {
+    if (!s?.trim()) return [{ id: crypto.randomUUID?.() ?? '1', ticker: '', corpus: '' }];
+    const parsed = s.split(',').map((part) => {
+      const colon = part.indexOf(':');
+      const ticker = colon >= 0 ? part.slice(0, colon).trim() : part.trim();
+      const corpusVal = colon >= 0 ? part.slice(colon + 1).trim() : '';
+      return {
+        id: crypto.randomUUID?.() ?? String(Date.now() + Math.random()),
+        ticker: ticker.toUpperCase(),
+        corpus: corpusVal.replace(/[^0-9.]/g, ''),
+      };
+    }).filter((e) => e.ticker || e.corpus);
+    return parsed.length ? parsed : [{ id: crypto.randomUUID?.() ?? '1', ticker: '', corpus: '' }];
+  };
+
+  const parseStrategy = (s: string | null, defaultVal: WithdrawalStrategy): WithdrawalStrategy => {
+    if (!s?.trim()) return defaultVal;
+    const parts = s.split(':');
+    const type = (parts[0] === 'fixed' || parts[0] === 'fixed_growth' || parts[0] === 'percent') ? parts[0] : defaultVal.type;
+    const amount = parts[1] ?? defaultVal.amount;
+    const growthPct = parts[2] ?? defaultVal.growthPct;
+    return { type, amount, growthPct };
+  };
+
+  const defaultA: WithdrawalStrategy = { type: 'fixed', amount: '1000', growthPct: '0.5' };
+  const defaultB: WithdrawalStrategy = { type: 'percent', amount: '1', growthPct: '0' };
+
+  return {
+    corpusEntries: parseCorpus(corpus),
+    startMonth: startMonth && /^\d{4}-\d{2}$/.test(startMonth) ? startMonth : defaultStartMonth(),
+    endMonth: endMonth && /^\d{4}-\d{2}$/.test(endMonth) ? endMonth : defaultEndMonth(),
+    strategyA: parseStrategy(sa, defaultA),
+    strategyB: parseStrategy(sb, defaultB),
+  };
+}
+
+function serializeStockSwpParams(
+  corpusEntries: CorpusEntry[],
+  startMonth: string,
+  endMonth: string,
+  strategyA: WithdrawalStrategy,
+  strategyB: WithdrawalStrategy
+): URLSearchParams {
+  const params = new URLSearchParams();
+  const corpusStr = corpusEntries
+    .filter((e) => e.ticker.trim() || parseFloat(e.corpus) > 0)
+    .map((e) => `${e.ticker}:${e.corpus}`)
+    .join(',');
+  if (corpusStr) params.set('corpus', corpusStr);
+  params.set('startMonth', startMonth);
+  params.set('endMonth', endMonth);
+  params.set('strategyA', `${strategyA.type}:${strategyA.amount}:${strategyA.growthPct}`);
+  params.set('strategyB', `${strategyB.type}:${strategyB.amount}:${strategyB.growthPct}`);
+  return params;
+}
+
 interface StockSwpTabProps {
   funds: mfapiMutualFund[];
 }
@@ -211,22 +283,25 @@ function StrategySection({
   );
 }
 
-export const StockSwpTab: React.FC<StockSwpTabProps> = () => {
-  const [corpusEntries, setCorpusEntries] = useState<CorpusEntry[]>([
-    { id: crypto.randomUUID?.() ?? '1', ticker: '', corpus: '' },
-  ]);
-  const [startMonth, setStartMonth] = useState<string>(defaultStartMonth);
-  const [endMonth, setEndMonth] = useState<string>(defaultEndMonth);
-  const [strategyA, setStrategyA] = useState<WithdrawalStrategy>({
-    type: 'fixed',
-    amount: '1000',
-    growthPct: '0.5',
-  });
-  const [strategyB, setStrategyB] = useState<WithdrawalStrategy>({
-    type: 'percent',
-    amount: '1',
-    growthPct: '0',
-  });
+export function StockSwpTab(_props: StockSwpTabProps): React.ReactElement {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialFromUrl = useMemo(() => parseStockSwpParams(searchParams), [searchParams.toString()]);
+
+  const [corpusEntries, setCorpusEntries] = useState<CorpusEntry[]>(() =>
+    initialFromUrl?.corpusEntries ?? [{ id: crypto.randomUUID?.() ?? '1', ticker: '', corpus: '' }]
+  );
+  const [startMonth, setStartMonth] = useState<string>(
+    () => initialFromUrl?.startMonth ?? defaultStartMonth()
+  );
+  const [endMonth, setEndMonth] = useState<string>(
+    () => initialFromUrl?.endMonth ?? defaultEndMonth()
+  );
+  const [strategyA, setStrategyA] = useState<WithdrawalStrategy>(
+    () => initialFromUrl?.strategyA ?? { type: 'fixed', amount: '1000', growthPct: '0.5' }
+  );
+  const [strategyB, setStrategyB] = useState<WithdrawalStrategy>(
+    () => initialFromUrl?.strategyB ?? { type: 'percent', amount: '1', growthPct: '0' }
+  );
   const [priceDataByTicker, setPriceDataByTicker] = useState<
     Record<string, Array<{ date: Date; nav: number }>>
   >({});
@@ -235,6 +310,16 @@ export const StockSwpTab: React.FC<StockSwpTabProps> = () => {
     strategyA: { valueData: Array<{ date: Date; value: number }>; withdrawalData: Array<{ date: Date; value: number }> };
     strategyB: { valueData: Array<{ date: Date; value: number }>; withdrawalData: Array<{ date: Date; value: number }> };
   } | null>(null);
+
+  useEffect(() => {
+    if (initialFromUrl) {
+      setCorpusEntries(initialFromUrl.corpusEntries);
+      setStartMonth(initialFromUrl.startMonth);
+      setEndMonth(initialFromUrl.endMonth);
+      setStrategyA(initialFromUrl.strategyA);
+      setStrategyB(initialFromUrl.strategyB);
+    }
+  }, [searchParams.toString()]);
 
   const validEntries = corpusEntries.filter((e) => e.ticker.trim() && parseFloat(e.corpus) > 0);
   const uniqueTickers = [...new Set(validEntries.map((e) => e.ticker.trim().toUpperCase()))];
@@ -385,6 +470,10 @@ export const StockSwpTab: React.FC<StockSwpTabProps> = () => {
         strategyA: resultA,
         strategyB: resultB,
       });
+      setSearchParams(
+        serializeStockSwpParams(corpusEntries, startMonth, endMonth, strategyA, strategyB),
+        { replace: true }
+      );
     } catch (error) {
       console.error('Error fetching stock prices:', error);
     } finally {
