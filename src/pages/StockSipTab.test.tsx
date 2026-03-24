@@ -43,6 +43,7 @@ describe('StockSipTab', () => {
     await screen.findByText(/Portfolio A – SIP Calculation Breakdown/);
     expect(screen.getByText(/Per ticker:/)).toBeInTheDocument();
     expect(screen.getByText('Price ($)')).toBeInTheDocument();
+    expect(screen.getByText('Month-end price ($)')).toBeInTheDocument();
     expect(screen.getByText('Accumulated Units')).toBeInTheDocument();
   });
 

@@ -22,6 +22,16 @@ function getPriceAtDate(data: Array<{ date: Date; nav: number }>, targetDate: Da
   return last.nav;
 }
 
+/**
+ * End of the last calendar day for YYYY-MM in local time. Using start-of-day made
+ * getPriceAtDate miss same-day closes (e.g. Jan 31 close is after Jan 31 00:00).
+ */
+function localMonthEndDateTime(monthStr: string): Date {
+  const [y, m] = monthStr.split('-').map(Number);
+  const lastDayNum = new Date(y, m, 0).getDate();
+  return new Date(y, m - 1, lastDayNum, 23, 59, 59, 999);
+}
+
 function parseSyntheticTicker(ticker: string): { rate: number } | null {
   const t = ticker.trim().toUpperCase();
   if (!t.startsWith('~')) return null;
@@ -413,6 +423,8 @@ export function StockSipTab(): React.ReactElement {
       month: string;
       ticker: string;
       price: number;
+      /** Closing (lookup) price on last calendar day of month — used with accumulated units for Value ($). */
+      monthEndPrice: number;
       sipAmount: number;
       unitsBought: number;
       accumulatedUnits: number;
@@ -425,8 +437,7 @@ export function StockSipTab(): React.ReactElement {
     let cumulativeInvested = 0;
 
     months.forEach((monthStr) => {
-      const monthEndDate = new Date(monthStr + '-01T12:00:00Z');
-      const lastDay = new Date(monthEndDate.getFullYear(), monthEndDate.getMonth() + 1, 0);
+      const lastDay = localMonthEndDateTime(monthStr);
       const investDate = new Date(monthStr + '-01T12:00:00Z');
 
       let monthInvestment = 0;
@@ -459,12 +470,14 @@ export function StockSipTab(): React.ReactElement {
         const data = priceDataByTicker[ticker];
         if (!data || data.length === 0) return;
         const price = getPriceAtDate(data, investDate);
+        const monthEndPrice = getPriceAtDate(data, lastDay);
         const unitsBought = price > 0 && monthlyAmount > 0 ? monthlyAmount / price : 0;
         const accumulatedUnits = cumulativeUnitsByTicker[ticker] ?? 0;
         monthlyBreakdown.push({
           month: monthStr,
           ticker,
           price,
+          monthEndPrice,
           sipAmount: monthlyAmount,
           unitsBought,
           accumulatedUnits,
@@ -587,12 +600,12 @@ export function StockSipTab(): React.ReactElement {
                   columns={['Ticker', 'Invested ($)', 'Units', 'End Value ($)', 'Return (%)']}
                   data={result.summary.map((s) => [
                     s.ticker,
-                    s.amount.toLocaleString('en-US', { minimumFractionDigits: 2 }),
-                    s.units.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 6 }),
-                    s.endValue.toLocaleString('en-US', { minimumFractionDigits: 2 }),
+                    s.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                    s.units.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                    s.endValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
                     s.returnPct != null ? (
                       <span style={{ color: s.returnPct >= 0 ? '#16a34a' : '#dc2626' }}>
-                        {(s.returnPct >= 0 ? '+' : '')}{s.returnPct.toFixed(1)}%
+                        {(s.returnPct >= 0 ? '+' : '')}{s.returnPct.toFixed(2)}%
                       </span>
                     ) : (
                       '—'
@@ -603,18 +616,18 @@ export function StockSipTab(): React.ReactElement {
                 />
                 <Block marginTop="scale400" paddingTop="scale300" $style={{ borderTop: '1px solid #e5e7eb' }}>
                   <ParagraphMedium marginTop="0" marginBottom="0">
-                    Total invested: <strong>${result.totalInvested.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
+                    Total invested: <strong>${result.totalInvested.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
                     {' · '}
-                    Total value at end: <strong>${result.totalEndValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
+                    Total value at end: <strong>${result.totalEndValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
                     {result.totalInvested > 0 && (
                       <span style={{ color: result.totalEndValue >= result.totalInvested ? '#16a34a' : '#dc2626' }}>
                         {' '}({(result.totalEndValue >= result.totalInvested ? '+' : '')}
-                        {(((result.totalEndValue - result.totalInvested) / result.totalInvested) * 100).toFixed(1)}%)
+                        {(((result.totalEndValue - result.totalInvested) / result.totalInvested) * 100).toFixed(2)}%)
                       </span>
                     )}
                     {result.totalXirr != null && (
                       <span style={{ color: result.totalXirr >= 0 ? '#16a34a' : '#dc2626', marginLeft: '8px' }}>
-                        · XIRR: {(result.totalXirr * 100).toFixed(1)}%
+                        · XIRR: {(result.totalXirr * 100).toFixed(2)}%
                       </span>
                     )}
                   </ParagraphMedium>
@@ -649,7 +662,7 @@ export function StockSipTab(): React.ReactElement {
                 {result.portfolio.name} – SIP Calculation Breakdown
               </LabelMedium>
               <ParagraphMedium marginTop="0" marginBottom="scale300" color="contentSecondary" $style={{ fontSize: '13px' }}>
-                Per ticker: Price = stock price on SIP date; Units Bought = SIP Amount / Price; Accumulated = total units held; Investment/Cumulative/Value/Return are portfolio totals.
+                Per ticker: Price ($) = on SIP date (1st of month); Month-end price ($) = on last calendar day of month (each ticker’s contribution to Value is accumulated units × this price). Value ($) is the portfolio total (sum across tickers). Investment/Cumulative/Return are portfolio totals.
               </ParagraphMedium>
               <Table
                 columns={[
@@ -661,22 +674,24 @@ export function StockSipTab(): React.ReactElement {
                   'Accumulated Units',
                   'Investment ($)',
                   'Cumulative ($)',
+                  'Month-end price ($)',
                   'Value ($)',
                   'Return (%)',
                 ]}
                 data={result.monthlyBreakdown.map((row) => [
                   row.month,
                   row.ticker,
-                  row.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 }),
-                  row.sipAmount.toLocaleString('en-US', { minimumFractionDigits: 2 }),
-                  row.unitsBought.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 6 }),
-                  row.accumulatedUnits.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 6 }),
-                  row.investment.toLocaleString('en-US', { minimumFractionDigits: 2 }),
-                  row.cumulativeInvested.toLocaleString('en-US', { minimumFractionDigits: 2 }),
-                  row.value.toLocaleString('en-US', { minimumFractionDigits: 2 }),
+                  row.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                  row.sipAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                  row.unitsBought.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                  row.accumulatedUnits.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                  row.investment.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                  row.cumulativeInvested.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                  row.monthEndPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                  row.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
                   row.returnPct != null ? (
                     <span style={{ color: row.returnPct >= 0 ? '#16a34a' : '#dc2626' }}>
-                      {(row.returnPct >= 0 ? '+' : '')}{row.returnPct.toFixed(1)}%
+                      {(row.returnPct >= 0 ? '+' : '')}{row.returnPct.toFixed(2)}%
                     </span>
                   ) : (
                     '—'
