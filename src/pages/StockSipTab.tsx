@@ -11,7 +11,6 @@ import { fillMissingNavDates } from '../utils/data/fillMissingNavDates';
 import { yahooFinanceService } from '../services/yahooFinanceService';
 import { StockPortfolioValueChart } from '../components/charts/StockPortfolioValueChart';
 import { StockPortfolioValueNormalizedChart } from '../components/charts/StockPortfolioValueNormalizedChart';
-import { mfapiMutualFund } from '../types/mfapiMutualFund';
 
 function getPriceAtDate(data: Array<{ date: Date; nav: number }>, targetDate: Date): number {
   const t = targetDate.getTime();
@@ -155,10 +154,6 @@ function serializeStockSipParams(
   return params;
 }
 
-interface StockSipTabProps {
-  funds: mfapiMutualFund[];
-}
-
 const dateInputStyle = {
   padding: '8px 12px',
   borderRadius: '4px',
@@ -239,7 +234,7 @@ function PortfolioSection({
   );
 }
 
-export function StockSipTab(_props: StockSipTabProps): React.ReactElement {
+export function StockSipTab(): React.ReactElement {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialFromUrl = useMemo(() => parseStockSipParams(searchParams), [searchParams.toString()]);
 

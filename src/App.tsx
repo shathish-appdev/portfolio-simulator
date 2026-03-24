@@ -1,9 +1,7 @@
 import React, { useEffect } from "react";
 import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { Container } from "./components/common/Container";
-import { useMutualFunds } from "./hooks/useMutualFunds";
 import { Block } from "baseui/block";
-import { LoadingErrorStates } from "./components/common/LoadingErrorStates";
 import { AppNavBar } from "baseui/app-nav-bar";
 import { StockPriceTab } from "./pages/StockPriceTab";
 import { StockSipTab } from "./pages/StockSipTab";
@@ -16,8 +14,6 @@ import { ToasterContainer } from "baseui/toast";
 import { setGlobalOpenHelp } from "./services/yahooFinanceService";
 
 const AppContent: React.FC = () => {
-  const { funds, loading, error } = useMutualFunds();
-
   const navigate = useNavigate();
   const location = useLocation();
   const { openHelp } = useHelp();
@@ -85,7 +81,6 @@ const AppContent: React.FC = () => {
         flexDirection="column"
       >
         <TabBar onHelpClick={() => openHelp("getting-started")} />
-        <LoadingErrorStates loading={loading} error={error} />
 
         {/* Routes */}
         <Routes>
@@ -99,21 +94,19 @@ const AppContent: React.FC = () => {
           <Route path="/portfolio" element={<Navigate to="/stock-price" replace />} />
         </Routes>
 
-        {!loading && !error && funds.length > 0 && (
-          <>
-            <Block display={isStockPriceTab ? "block" : "none"} flex="1">
-              <StockPriceTab funds={funds} />
-            </Block>
+        <>
+          <Block display={isStockPriceTab ? "block" : "none"} flex="1">
+            <StockPriceTab />
+          </Block>
 
-            <Block display={isStockSipTab ? "block" : "none"} flex="1">
-              <StockSipTab funds={funds} />
-            </Block>
+          <Block display={isStockSipTab ? "block" : "none"} flex="1">
+            <StockSipTab />
+          </Block>
 
-            <Block display={isStockSwpTab ? "block" : "none"} flex="1">
-              <StockSwpTab funds={funds} />
-            </Block>
-          </>
-        )}
+          <Block display={isStockSwpTab ? "block" : "none"} flex="1">
+            <StockSwpTab />
+          </Block>
+        </>
       </Block>
 
       <BottomBar />

@@ -10,7 +10,6 @@ import { LoadingOverlay } from '../components/common/LoadingOverlay';
 import { fillMissingNavDates } from '../utils/data/fillMissingNavDates';
 import { yahooFinanceService } from '../services/yahooFinanceService';
 import { StockPortfolioValueChart } from '../components/charts/StockPortfolioValueChart';
-import { mfapiMutualFund } from '../types/mfapiMutualFund';
 
 function getPriceAtDate(data: Array<{ date: Date; nav: number }>, targetDate: Date): number {
   const t = targetDate.getTime();
@@ -189,10 +188,6 @@ function serializeStockSwpParams(
   return params;
 }
 
-interface StockSwpTabProps {
-  funds: mfapiMutualFund[];
-}
-
 function StrategySection({
   name,
   strategy,
@@ -283,7 +278,7 @@ function StrategySection({
   );
 }
 
-export function StockSwpTab(_props: StockSwpTabProps): React.ReactElement {
+export function StockSwpTab(): React.ReactElement {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialFromUrl = useMemo(() => parseStockSwpParams(searchParams), [searchParams.toString()]);
 

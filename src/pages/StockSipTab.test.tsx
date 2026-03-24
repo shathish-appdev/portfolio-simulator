@@ -13,8 +13,6 @@ jest.mock('../components/charts/StockPortfolioValueNormalizedChart', () => ({
   StockPortfolioValueNormalizedChart: () => <div data-testid="portfolio-normalized-chart" />,
 }));
 
-const mockFunds = [{ schemeCode: 1, schemeName: 'Test' }];
-
 const renderWithBaseUI = (ui: React.ReactElement) =>
   render(
     <MemoryRouter initialEntries={['/stock-sip']}>
@@ -28,13 +26,13 @@ describe('StockSipTab', () => {
   });
 
   it('renders both Portfolio A and Portfolio B sections', () => {
-    renderWithBaseUI(<StockSipTab funds={mockFunds} />);
+    renderWithBaseUI(<StockSipTab />);
     expect(screen.getByText('Portfolio A')).toBeInTheDocument();
     expect(screen.getByText('Portfolio B')).toBeInTheDocument();
   });
 
   it('shows SIP calculation breakdown table after Plot with synthetic ticker', async () => {
-    renderWithBaseUI(<StockSipTab funds={mockFunds} />);
+    renderWithBaseUI(<StockSipTab />);
     const tickerA = screen.getAllByPlaceholderText('Ticker (e.g. AAPL, ~12)')[0];
     const amountA = screen.getAllByPlaceholderText('Monthly')[0];
     await userEvent.type(tickerA, '~12');
@@ -49,7 +47,7 @@ describe('StockSipTab', () => {
   });
 
   it('does not create duplicate charts when Plot is clicked multiple times', async () => {
-    renderWithBaseUI(<StockSipTab funds={mockFunds} />);
+    renderWithBaseUI(<StockSipTab />);
     const tickerA = screen.getAllByPlaceholderText('Ticker (e.g. AAPL, ~12)')[0];
     const amountA = screen.getAllByPlaceholderText('Monthly')[0];
     await userEvent.type(tickerA, '~12');

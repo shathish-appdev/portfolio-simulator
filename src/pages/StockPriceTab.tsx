@@ -13,7 +13,6 @@ import { StockPriceNormalizedChart } from '../components/charts/StockPriceNormal
 import { LoadingOverlay } from '../components/common/LoadingOverlay';
 import { COLORS } from '../constants';
 import { yahooFinanceService } from '../services/yahooFinanceService';
-import { mfapiMutualFund } from '../types/mfapiMutualFund';
 import { fillMissingNavDates } from '../utils/data/fillMissingNavDates';
 
 function calculateXirr(
@@ -294,11 +293,6 @@ function serializeStockPriceParams(
   return params;
 }
 
-interface StockPriceTabProps {
-  funds: mfapiMutualFund[];
-  loadNavData?: (asset: any) => Promise<any[]>;
-}
-
 const dateInputStyle = {
   padding: '8px 12px',
   borderRadius: '4px',
@@ -368,7 +362,7 @@ function PortfolioSection({
   );
 }
 
-export const StockPriceTab: React.FC<StockPriceTabProps> = () => {
+export const StockPriceTab: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const initialFromUrl = useMemo(() => parseStockPriceParams(searchParams), [searchParams.toString()]);

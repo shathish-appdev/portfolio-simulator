@@ -12,8 +12,6 @@ jest.mock('../components/charts/StockPortfolioValueChart', () => ({
   ),
 }));
 
-const mockFunds = [{ schemeCode: 1, schemeName: 'Test' }];
-
 const renderWithBaseUI = (ui: React.ReactElement) =>
   render(
     <MemoryRouter initialEntries={['/stock-swp']}>
@@ -27,7 +25,7 @@ describe('StockSwpTab', () => {
   });
 
   it('renders portfolio section and strategy sections', () => {
-    renderWithBaseUI(<StockSwpTab funds={mockFunds} />);
+    renderWithBaseUI(<StockSwpTab />);
     expect(screen.getByText('Portfolio (shared)')).toBeInTheDocument();
     expect(screen.getByText('Strategy A')).toBeInTheDocument();
     expect(screen.getByText('Strategy B')).toBeInTheDocument();
@@ -35,7 +33,7 @@ describe('StockSwpTab', () => {
   });
 
   it('shows portfolio value and withdrawal charts after Simulate with synthetic ticker', async () => {
-    renderWithBaseUI(<StockSwpTab funds={mockFunds} />);
+    renderWithBaseUI(<StockSwpTab />);
     const tickerInput = screen.getByPlaceholderText('Ticker (e.g. VOO, ~12)');
     const corpusInput = screen.getByPlaceholderText('e.g. 100000');
     await userEvent.type(tickerInput, '~12');
