@@ -1,12 +1,13 @@
-import React from "react";
-import { useNavigate, useLocation } from "react-router-dom";
-import { Block } from "baseui/block";
 import { useStyletron } from "baseui";
+import { Block } from "baseui/block";
+import React from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
 const TABS = [
   { path: "/stock-price", label: "Lumpsum" },
   { path: "/stock-sip", label: "SIP (Stocks)" },
   { path: "/stock-swp", label: "SWP (Stocks)" },
+  { path: "/compare", label: "Compare" },
 ] as const;
 
 interface TabBarProps {

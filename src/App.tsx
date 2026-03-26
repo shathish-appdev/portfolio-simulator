@@ -1,17 +1,18 @@
-import React, { useEffect } from "react";
-import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
-import { Container } from "./components/common/Container";
-import { Block } from "baseui/block";
 import { AppNavBar } from "baseui/app-nav-bar";
+import { Block } from "baseui/block";
+import { ToasterContainer } from "baseui/toast";
+import React, { useEffect } from "react";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { Container } from "./components/common/Container";
+import { HelpDrawer, HelpProvider, useHelp } from "./components/help";
+import { BottomBar } from "./components/layout/BottomBar";
+import { TabBar } from "./components/layout/TabBar";
+import LumpsumSipCompare from './pages/LumpsumSipCompare';
 import { StockPriceTab } from "./pages/StockPriceTab";
 import { StockSipTab } from "./pages/StockSipTab";
 import { StockSwpTab } from "./pages/StockSwpTab";
-import { BottomBar } from "./components/layout/BottomBar";
-import { TabBar } from "./components/layout/TabBar";
-import { HelpProvider, HelpDrawer, useHelp } from "./components/help";
-import { trackPageView } from "./utils/analytics";
-import { ToasterContainer } from "baseui/toast";
 import { setGlobalOpenHelp } from "./services/yahooFinanceService";
+import { trackPageView } from "./utils/analytics";
 
 const AppContent: React.FC = () => {
   const navigate = useNavigate();
@@ -32,6 +33,7 @@ const AppContent: React.FC = () => {
   const isStockPriceTab = location.pathname === "/stock-price";
   const isStockSipTab = location.pathname === "/stock-sip";
   const isStockSwpTab = location.pathname === "/stock-swp";
+  const isCompareTab = location.pathname === "/compare";
 
   return (
     <Container>
@@ -43,6 +45,7 @@ const AppContent: React.FC = () => {
           { label: "Lumpsum", active: isStockPriceTab },
           { label: "SIP (Stocks)", active: isStockSipTab },
           { label: "SWP (Stocks)", active: isStockSwpTab },
+          { label: "Compare", active: isCompareTab },
           { label: "Help", info: { id: "help" } },
         ]}
         onMainItemSelect={(item) => {
@@ -55,6 +58,9 @@ const AppContent: React.FC = () => {
               break;
             case "SWP (Stocks)":
               navigate("/stock-swp");
+              break;
+            case "Compare":
+              navigate("/compare");
               break;
             case "Help":
               openHelp("getting-started");
@@ -91,6 +97,7 @@ const AppContent: React.FC = () => {
           <Route path="/stock-price" element={null} />
           <Route path="/stock-sip" element={null} />
           <Route path="/stock-swp" element={null} />
+          <Route path="/compare" element={null} />
           <Route path="/portfolio" element={<Navigate to="/stock-price" replace />} />
         </Routes>
 
@@ -105,6 +112,10 @@ const AppContent: React.FC = () => {
 
           <Block display={isStockSwpTab ? "block" : "none"} flex="1">
             <StockSwpTab />
+          </Block>
+
+          <Block display={isCompareTab ? "block" : "none"} flex="1">
+            <LumpsumSipCompare />
           </Block>
         </>
       </Block>
