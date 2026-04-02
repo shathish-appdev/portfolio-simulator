@@ -7,6 +7,7 @@ const TABS = [
   { path: "/stock-price", label: "Lumpsum" },
   { path: "/stock-sip", label: "SIP (Stocks)" },
   { path: "/stock-swp", label: "SWP (Stocks)" },
+  { path: "/yahoo-stock-price", label: "Yahoo Prices" },
   { path: "/compare", label: "Compare" },
 ] as const;
 
