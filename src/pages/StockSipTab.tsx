@@ -7,6 +7,8 @@ import { Input } from 'baseui/input';
 import { LabelMedium, ParagraphMedium } from 'baseui/typography';
 import { Table } from 'baseui/table-semantic';
 import { LoadingOverlay } from '../components/common/LoadingOverlay';
+import { PageCard, PageIntro } from '../components/common/PageChrome';
+import { splitTickerAmountSegment } from '../utils/browser/tickerAmountUrl';
 import { fillMissingNavDates } from '../utils/data/fillMissingNavDates';
 import { yahooFinanceService } from '../services/yahooFinanceService';
 import { StockPortfolioValueChart } from '../components/charts/StockPortfolioValueChart';
@@ -121,9 +123,7 @@ function parseStockSipParams(searchParams: URLSearchParams): {
   const parseEntries = (s: string | null): PortfolioEntry[] => {
     if (!s?.trim()) return [{ id: crypto.randomUUID?.() ?? String(Date.now()), ticker: '', amount: '' }];
     const parsed = s.split(',').map((part) => {
-      const colon = part.indexOf(':');
-      const ticker = colon >= 0 ? part.slice(0, colon).trim() : part.trim();
-      const amount = colon >= 0 ? part.slice(colon + 1).trim() : '';
+      const { ticker, amount } = splitTickerAmountSegment(part);
       return {
         id: crypto.randomUUID?.() ?? String(Date.now() + Math.random()),
         ticker: ticker.toUpperCase(),
@@ -165,11 +165,12 @@ function serializeStockSipParams(
 }
 
 const dateInputStyle = {
-  padding: '8px 12px',
-  borderRadius: '4px',
-  border: '1px solid #e5e7eb',
+  padding: '10px 12px',
+  borderRadius: '8px',
+  border: '1px solid #e2e8f0',
   fontSize: '14px',
   fontFamily: 'inherit' as const,
+  backgroundColor: '#fff',
 };
 
 function defaultStartMonth(): string {
@@ -510,28 +511,12 @@ export function StockSipTab(): React.ReactElement {
     <Block position="relative">
       <LoadingOverlay active={loading} />
 
-      <Block maxWidth="900px" margin="0 auto" marginBottom="scale400" paddingTop="0" display="flex" justifyContent="center">
-        <ParagraphMedium color="contentTertiary" marginTop="0" marginBottom="0">
-          Simulate SIP (monthly investment). Select start and end month. Each month you invest the amount per ticker.
-        </ParagraphMedium>
-      </Block>
+      <PageIntro title="SIP (stocks)">
+        Monthly investments across a date range. Pick start and end month; each month invests the amount you set per ticker.
+      </PageIntro>
 
-      <Block maxWidth="900px" margin="0 auto">
-        <Block
-          position="relative"
-          padding="scale700"
-          marginBottom="scale600"
-          backgroundColor="backgroundPrimary"
-          overrides={{
-            Block: {
-              style: ({ $theme }) => ({
-                borderLeft: '4px solid #007bff',
-                borderRadius: $theme.borders.radius200,
-              }),
-            },
-          }}
-        >
-          <Block display="flex" flexDirection={['column', 'column', 'row']} gridGap="scale600" $style={{ flexWrap: 'wrap' }}>
+      <PageCard>
+        <Block display="flex" flexDirection={['column', 'column', 'row']} gridGap="scale600" $style={{ flexWrap: 'wrap' }}>
             {portfolios.map((portfolio, idx) => (
               <Block
                 key={portfolio.id}
@@ -549,14 +534,14 @@ export function StockSipTab(): React.ReactElement {
             ))}
           </Block>
           <Block display="flex" alignItems="center" gridGap="scale300" marginTop="scale400" $style={{ flexWrap: 'wrap' }}>
-            <LabelMedium marginBottom="0" marginTop="0">Start Month</LabelMedium>
+            <LabelMedium marginBottom="0" marginTop="0">Start month</LabelMedium>
             <input
               type="month"
               value={startMonth}
               onChange={(e) => setStartMonth(e.target.value)}
               style={dateInputStyle}
             />
-            <LabelMedium marginBottom="0" marginTop="0">End Month</LabelMedium>
+            <LabelMedium marginBottom="0" marginTop="0">End month</LabelMedium>
             <input
               type="month"
               value={endMonth}
@@ -572,11 +557,10 @@ export function StockSipTab(): React.ReactElement {
               </LabelMedium>
             )}
           </Block>
-        </Block>
-      </Block>
+      </PageCard>
 
       {hasAnyChartData && (
-        <Block maxWidth="90%" margin="0 auto">
+        <Block maxWidth="960px" margin="0 auto" width="100%">
           {portfolioResults.map((result) =>
             result.summary.length > 0 ? (
               <Block

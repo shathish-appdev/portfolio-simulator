@@ -7,9 +7,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import xirr from 'xirr';
 import { LoadingOverlay } from '../components/common/LoadingOverlay';
+import { PageCard, PageIntro } from '../components/common/PageChrome';
 import { StockPriceChart } from '../components/charts/StockPriceChart';
 import { COLORS } from '../constants';
 import { yahooFinanceService } from '../services/yahooFinanceService';
+import { splitTickerAmountSegment } from '../utils/browser/tickerAmountUrl';
 import { fillMissingNavDates } from '../utils/data/fillMissingNavDates';
 
 /* ─────────────── helpers ─────────────── */
@@ -125,9 +127,7 @@ function parseCompareParams(searchParams: URLSearchParams): {
   const parseEntries = (s: string | null): PortfolioEntry[] => {
     if (!s?.trim()) return [{ id: crypto.randomUUID?.() ?? String(Date.now()), ticker: '', amount: '' }];
     const parsed = s.split(',').map((part) => {
-      const colon = part.indexOf(':');
-      const ticker = colon >= 0 ? part.slice(0, colon).trim() : part.trim();
-      const amount = colon >= 0 ? part.slice(colon + 1).trim() : '';
+      const { ticker, amount } = splitTickerAmountSegment(part);
       return {
         id: crypto.randomUUID?.() ?? String(Date.now() + Math.random()),
         ticker: ticker.toUpperCase(),
@@ -170,11 +170,12 @@ function hasValidCompareEntries(entries: PortfolioEntry[]): boolean {
 /* ─────────────── UI Styles ─────────────── */
 
 const dateInputStyle = {
-  padding: '8px 12px',
-  borderRadius: '4px',
-  border: '1px solid #e5e7eb',
+  padding: '10px 12px',
+  borderRadius: '8px',
+  border: '1px solid #e2e8f0',
   fontSize: '14px',
   fontFamily: 'inherit' as const,
+  backgroundColor: '#fff',
 };
 
 /* ─────────────── Holdings (tickers + amounts) ─────────────── */
@@ -194,13 +195,13 @@ function HoldingsSection({
     <Block
       padding="scale500"
       marginBottom="scale400"
+      backgroundColor="backgroundSecondary"
       overrides={{
         Block: {
-          style: {
-            borderLeft: '4px solid #6366f1',
-            borderRadius: '8px',
-            backgroundColor: '#fafafa',
-          },
+          style: ({ $theme }) => ({
+            borderRadius: $theme.borders.radius300,
+            border: `1px solid ${$theme.colors.borderOpaque}`,
+          }),
         },
       }}
     >
@@ -565,62 +566,49 @@ export default function LumpsumSipCompare(): React.ReactElement {
     <Block position="relative">
       <LoadingOverlay active={loading} />
 
-      <Block maxWidth="900px" margin="0 auto" marginBottom="scale400" paddingTop="0" display="flex" justifyContent="center">
-        <ParagraphMedium color="contentTertiary" marginTop="0" marginBottom="0">
-          Compare Lumpsum vs SIP for the same holdings. Enter total amount per stock — Lumpsum invests it all at the start month, SIP splits equally across months in the range. Use ~12 for 12% synthetic ticker.
-        </ParagraphMedium>
-      </Block>
+      <PageIntro title="Compare Lumpsum vs SIP">
+        Enter total dollars per ticker for the same holdings. Lumpsum invests the full amount at the start month; SIP spreads it evenly across each month in the range. Use ~12 for a synthetic 12% path.
+      </PageIntro>
 
-      <Block maxWidth="900px" margin="0 auto">
-        <Block
-          position="relative"
-          padding="scale700"
-          marginBottom="scale600"
-          backgroundColor="backgroundPrimary"
-          overrides={{
-            Block: {
-              style: ({ $theme }) => ({
-                borderLeft: '4px solid #007bff',
-                borderRadius: $theme.borders.radius200,
-              }),
-            },
-          }}
-        >
-          <HoldingsSection
-            entries={entries}
-            onUpdate={(id, field, value) => handleUpdateEntry(id, field, value)}
-            onAddRow={handleAddRow}
-            onRemoveRow={handleRemoveRow}
-          />
-          <Block display="flex" alignItems="center" gridGap="scale300" marginTop="scale400" $style={{ flexWrap: 'wrap' }}>
-            <LabelMedium marginBottom="0" marginTop="0">Start Month</LabelMedium>
+      <PageCard>
+        <HoldingsSection
+          entries={entries}
+          onUpdate={(id, field, value) => handleUpdateEntry(id, field, value)}
+          onAddRow={handleAddRow}
+          onRemoveRow={handleRemoveRow}
+        />
+        <Block display="flex" alignItems="center" gridGap="scale400" marginTop="scale500" $style={{ flexWrap: 'wrap' }}>
+          <Block display="flex" alignItems="center" gridGap="scale200" $style={{ flexWrap: 'wrap' }}>
+            <LabelMedium marginBottom="0" marginTop="0">Start month</LabelMedium>
             <input
               type="month"
               value={startMonth}
               onChange={(e) => setStartMonth(e.target.value)}
               style={dateInputStyle}
             />
-            <LabelMedium marginBottom="0" marginTop="0">End Month</LabelMedium>
+          </Block>
+          <Block display="flex" alignItems="center" gridGap="scale200" $style={{ flexWrap: 'wrap' }}>
+            <LabelMedium marginBottom="0" marginTop="0">End month</LabelMedium>
             <input
               type="month"
               value={endMonth}
               onChange={(e) => setEndMonth(e.target.value)}
               style={dateInputStyle}
             />
-            <Button kind="primary" onClick={handleCompare} disabled={!hasValidEntries || isRangeInvalid}>
-              Compare
-            </Button>
-            {isRangeInvalid && (
-              <LabelMedium marginBottom="0" marginTop="0" overrides={{ Block: { style: ({ $theme }) => ({ color: $theme.colors.negative }) } }}>
-                Start month must be before end month
-              </LabelMedium>
-            )}
           </Block>
+          <Button kind="primary" onClick={handleCompare} disabled={!hasValidEntries || isRangeInvalid}>
+            Compare
+          </Button>
+          {isRangeInvalid && (
+            <LabelMedium marginBottom="0" marginTop="0" overrides={{ Block: { style: ({ $theme }) => ({ color: $theme.colors.negative }) } }}>
+              Start month must be before end month
+            </LabelMedium>
+          )}
         </Block>
-      </Block>
+      </PageCard>
 
       {hasAnyChartData && (
-        <Block maxWidth="90%" margin="0 auto">
+        <Block maxWidth="960px" margin="0 auto" width="100%">
           {(() => {
             const result = compareResult;
             const hasLumpsum = result.lumpsumDetails.length > 0;
@@ -637,20 +625,22 @@ export default function LumpsumSipCompare(): React.ReactElement {
             return (
               <Block
                 key="compare-summary"
-                padding="scale500"
-                marginBottom="scale400"
-                backgroundColor="backgroundSecondary"
+                padding="scale600"
+                marginBottom="scale500"
+                backgroundColor="backgroundPrimary"
                 overrides={{
                   Block: {
                     style: ({ $theme }) => ({
-                      borderRadius: $theme.borders.radius200,
+                      borderRadius: $theme.borders.radius300,
                       fontSize: '14px',
+                      border: `1px solid ${$theme.colors.borderOpaque}`,
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
                     }),
                   },
                 }}
               >
-                <LabelMedium marginBottom="scale300" $style={{ fontWeight: 600 }}>
-                  Lumpsum vs SIP
+                <LabelMedium marginBottom="scale400" $style={{ fontWeight: 700, fontSize: '16px' }}>
+                  Results
                 </LabelMedium>
                 <Table
                   columns={['Scenario', 'Total Invested ($)', 'End Value ($)', 'Return (%)', 'XIRR (%)']}
@@ -776,18 +766,20 @@ export default function LumpsumSipCompare(): React.ReactElement {
             <Block
               key="sip-breakdown"
               marginTop="scale700"
-              padding="scale500"
-              backgroundColor="backgroundSecondary"
+              padding="scale600"
+              backgroundColor="backgroundPrimary"
               overrides={{
                 Block: {
                   style: ({ $theme }) => ({
-                    borderRadius: $theme.borders.radius200,
+                    borderRadius: $theme.borders.radius300,
                     overflowX: 'auto',
+                    border: `1px solid ${$theme.colors.borderOpaque}`,
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
                   }),
                 },
               }}
             >
-              <LabelMedium marginBottom="scale400" $style={{ fontWeight: 600 }}>
+              <LabelMedium marginBottom="scale400" $style={{ fontWeight: 700, fontSize: '16px' }}>
                 SIP calculation breakdown
               </LabelMedium>
               <ParagraphMedium marginTop="0" marginBottom="scale300" color="contentSecondary" $style={{ fontSize: '13px' }}>

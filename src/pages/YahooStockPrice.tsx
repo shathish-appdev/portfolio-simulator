@@ -1,10 +1,11 @@
-﻿import { Block } from 'baseui/block';
+import { Block } from 'baseui/block';
 import { Button } from 'baseui/button';
 import { Input } from 'baseui/input';
 import { Table } from 'baseui/table-semantic';
 import { LabelMedium, ParagraphMedium } from 'baseui/typography';
 import React, { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { PageCard, PageIntro } from '../components/common/PageChrome';
 import { StockPriceChart } from '../components/charts/StockPriceChart';
 import { yahooFinanceService } from '../services/yahooFinanceService';
 
@@ -132,27 +133,34 @@ export const YahooStockPrice: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
+  const dateInputStyle = {
+    padding: '10px 12px',
+    borderRadius: '8px',
+    border: '1px solid #e2e8f0',
+    fontSize: '14px',
+    fontFamily: 'inherit' as const,
+    backgroundColor: '#fff',
+  };
+
   return (
     <Block position="relative">
-      <Block maxWidth="900px" margin="0 auto" marginBottom="scale400" paddingTop="0" display="flex" justifyContent="center">
-        <ParagraphMedium color="contentTertiary" marginTop="0" marginBottom="0">
-          One ticker price info (month start + month end), plus CSV download and a chart.
-        </ParagraphMedium>
-      </Block>
+      <PageIntro title="Yahoo stock prices">
+        Daily adjusted close for one ticker, with month-start and month-end summaries, optional CSV export, and a price chart.
+      </PageIntro>
 
-      <Block maxWidth="900px" margin="0 auto" padding="scale600" backgroundColor="backgroundPrimary" overrides={{ Block: { style: { borderRadius: '10px', border: '1px solid #e5e7eb' } } }}>
+      <PageCard>
         <Block display="flex" flexWrap="wrap" gridGap="scale500" marginBottom="scale400" alignItems="flex-end">
           <Block display="flex" flexDirection="column" gridGap="scale100">
             <LabelMedium>Ticker</LabelMedium>
             <Input value={ticker} onChange={(e) => setTicker((e.target as HTMLInputElement).value.toUpperCase())} placeholder="AAPL" size="compact" />
           </Block>
           <Block display="flex" flexDirection="column" gridGap="scale100">
-            <LabelMedium>Start Date</LabelMedium>
-            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ padding: '8px 12px', borderRadius: '4px', border: '1px solid #e5e7eb', fontSize: '14px', fontFamily: 'inherit' }} />
+            <LabelMedium>Start date</LabelMedium>
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={dateInputStyle} />
           </Block>
           <Block display="flex" flexDirection="column" gridGap="scale100">
-            <LabelMedium>End Date</LabelMedium>
-            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={{ padding: '8px 12px', borderRadius: '4px', border: '1px solid #e5e7eb', fontSize: '14px', fontFamily: 'inherit' }} />
+            <LabelMedium>End date</LabelMedium>
+            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={dateInputStyle} />
           </Block>
           <Button kind="primary" onClick={handleFetch} isLoading={loading} disabled={isDateInvalid || loading}>Fetch</Button>
           <Button kind="secondary" onClick={downloadCsv} disabled={priceData.length === 0}>Download CSV</Button>
@@ -161,10 +169,12 @@ export const YahooStockPrice: React.FC = () => {
         {error && <ParagraphMedium marginTop="scale200" color="contentNegative">{error}</ParagraphMedium>}
 
         {priceData.length === 0 ? (
-          <ParagraphMedium marginTop="scale400">No data yet. Click Fetch to load data.</ParagraphMedium>
+          <ParagraphMedium marginTop="scale400" color="contentSecondary">
+            No data yet. Enter a ticker and dates, then click Fetch.
+          </ParagraphMedium>
         ) : (
           <>
-            <Block marginTop="scale400" display="flex" gap="scale500" flexWrap="wrap">
+            <Block marginTop="scale400" display="flex" gridGap="scale500" flexWrap="wrap">
               <Block>
                 <LabelMedium>Summary</LabelMedium>
                 <ParagraphMedium marginTop="0">Month-start: {monthStartSummary.start != null ? monthStartSummary.start.toFixed(2) : 'N/A'} → {monthStartSummary.end != null ? monthStartSummary.end.toFixed(2) : 'N/A'}</ParagraphMedium>
@@ -185,7 +195,7 @@ export const YahooStockPrice: React.FC = () => {
             />
           </>
         )}
-      </Block>
+      </PageCard>
     </Block>
   );
 };
