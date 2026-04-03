@@ -11,8 +11,10 @@ import { StockPortfolioValueNormalizedChart } from '../components/charts/StockPo
 import { StockPriceChart } from '../components/charts/StockPriceChart';
 import { StockPriceNormalizedChart } from '../components/charts/StockPriceNormalizedChart';
 import { LoadingOverlay } from '../components/common/LoadingOverlay';
+import { PageCard, PageIntro } from '../components/common/PageChrome';
 import { COLORS } from '../constants';
 import { yahooFinanceService } from '../services/yahooFinanceService';
+import { splitTickerAmountSegment } from '../utils/browser/tickerAmountUrl';
 import { fillMissingNavDates } from '../utils/data/fillMissingNavDates';
 
 function calculateXirr(
@@ -249,9 +251,7 @@ function parseStockPriceParams(searchParams: URLSearchParams): {
   const parseEntries = (s: string | null): PortfolioEntry[] => {
     if (!s?.trim()) return [{ id: crypto.randomUUID?.() ?? String(Date.now()), ticker: '', amount: '' }];
     const parsed = s.split(',').map((part) => {
-      const colon = part.indexOf(':');
-      const ticker = colon >= 0 ? part.slice(0, colon).trim() : part.trim();
-      const amount = colon >= 0 ? part.slice(colon + 1).trim() : '';
+      const { ticker, amount } = splitTickerAmountSegment(part);
       return {
         id: crypto.randomUUID?.() ?? String(Date.now() + Math.random()),
         ticker: ticker.toUpperCase(),
@@ -294,11 +294,12 @@ function serializeStockPriceParams(
 }
 
 const dateInputStyle = {
-  padding: '8px 12px',
-  borderRadius: '4px',
-  border: '1px solid #e5e7eb',
+  padding: '10px 12px',
+  borderRadius: '8px',
+  border: '1px solid #e2e8f0',
   fontSize: '14px',
   fontFamily: 'inherit' as const,
+  backgroundColor: '#fff',
 };
 
 function PortfolioSection({
@@ -559,28 +560,12 @@ export const StockPriceTab: React.FC = () => {
     <Block position="relative">
       <LoadingOverlay active={loading} />
 
-      <Block maxWidth="900px" margin="0 auto" marginBottom="scale400" paddingTop="0" display="flex" justifyContent="center">
-        <ParagraphMedium color="contentTertiary" marginTop="0" marginBottom="0">
-          Build and compare two portfolios. Add stocks to Portfolio A and/or B. Use ~12 for a 12% XIRR target, ~TARGET_RATE for 12%, or ~TARGET_RATE:10 for 10%.
-        </ParagraphMedium>
-      </Block>
+      <PageIntro title="Lumpsum portfolio simulator">
+        Build and compare two portfolios (A and B). Add tickers and dollar amounts. Use ~12 for a 12% synthetic path, ~TARGET_RATE for 12%, or ~TARGET_RATE:10 for 10%.
+      </PageIntro>
 
-      <Block maxWidth="900px" margin="0 auto">
-        <Block
-          position="relative"
-          padding="scale700"
-          marginBottom="scale600"
-          backgroundColor="backgroundPrimary"
-          overrides={{
-            Block: {
-              style: ({ $theme }) => ({
-                borderLeft: '4px solid #007bff',
-                borderRadius: $theme.borders.radius200,
-              }),
-            },
-          }}
-        >
-          <Block display="flex" flexDirection={['column', 'column', 'row']} gridGap="scale600">
+      <PageCard>
+        <Block display="flex" flexDirection={['column', 'column', 'row']} gridGap="scale600">
             <Block flex="1">
               <PortfolioSection
                 portfolio={portfolios[0]}
@@ -601,9 +586,9 @@ export const StockPriceTab: React.FC = () => {
             </Block>
           </Block>
           <Block display="flex" alignItems="center" gridGap="scale300" flexWrap="wrap" marginTop="scale400">
-            <LabelMedium marginBottom="0" marginTop="0">Start Date</LabelMedium>
+            <LabelMedium marginBottom="0" marginTop="0">Start date</LabelMedium>
             <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={dateInputStyle} />
-            <LabelMedium marginBottom="0" marginTop="0">End Date</LabelMedium>
+            <LabelMedium marginBottom="0" marginTop="0">End date</LabelMedium>
             <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={dateInputStyle} />
             <Button kind="primary" onClick={handlePlot} disabled={!hasValidEntries || isDateRangeInvalid}>
               Plot
@@ -614,11 +599,10 @@ export const StockPriceTab: React.FC = () => {
               </LabelMedium>
             )}
           </Block>
-        </Block>
-      </Block>
+      </PageCard>
 
       {hasAnyChartData && (
-        <Block maxWidth="90%" margin="0 auto">
+        <Block maxWidth="960px" margin="0 auto" width="100%">
           {portfolioResults.map((result) =>
             result.summary.length > 0 ? (
               <Block

@@ -7,6 +7,8 @@ import { LabelMedium, ParagraphMedium } from 'baseui/typography';
 import { Table } from 'baseui/table-semantic';
 import { Select } from 'baseui/select';
 import { LoadingOverlay } from '../components/common/LoadingOverlay';
+import { PageCard, PageIntro } from '../components/common/PageChrome';
+import { splitTickerAmountSegment } from '../utils/browser/tickerAmountUrl';
 import { fillMissingNavDates } from '../utils/data/fillMissingNavDates';
 import { yahooFinanceService } from '../services/yahooFinanceService';
 import { StockPortfolioValueChart } from '../components/charts/StockPortfolioValueChart';
@@ -99,11 +101,12 @@ const STRATEGY_OPTIONS = [
 ];
 
 const dateInputStyle = {
-  padding: '8px 12px',
-  borderRadius: '4px',
-  border: '1px solid #e5e7eb',
+  padding: '10px 12px',
+  borderRadius: '8px',
+  border: '1px solid #e2e8f0',
   fontSize: '14px',
   fontFamily: 'inherit' as const,
+  backgroundColor: '#fff',
 };
 
 function defaultStartMonth(): string {
@@ -135,9 +138,7 @@ function parseStockSwpParams(searchParams: URLSearchParams): {
   const parseCorpus = (s: string | null): CorpusEntry[] => {
     if (!s?.trim()) return [{ id: crypto.randomUUID?.() ?? '1', ticker: '', corpus: '' }];
     const parsed = s.split(',').map((part) => {
-      const colon = part.indexOf(':');
-      const ticker = colon >= 0 ? part.slice(0, colon).trim() : part.trim();
-      const corpusVal = colon >= 0 ? part.slice(colon + 1).trim() : '';
+      const { ticker, amount: corpusVal } = splitTickerAmountSegment(part);
       return {
         id: crypto.randomUUID?.() ?? String(Date.now() + Math.random()),
         ticker: ticker.toUpperCase(),
@@ -498,29 +499,14 @@ export function StockSwpTab(): React.ReactElement {
     <Block position="relative">
       <LoadingOverlay active={loading} />
 
-      <Block maxWidth="900px" margin="0 auto" marginBottom="scale400">
-        <ParagraphMedium color="contentTertiary" marginTop="0" marginBottom="0">
-          Simulate SWP (Systematic Withdrawal Plan). Enter your holdings (ticker + corpus $). Choose two withdrawal strategies to compare.
-        </ParagraphMedium>
-      </Block>
+      <PageIntro title="SWP (stocks)">
+        Systematic withdrawals from a stock portfolio. Enter tickers and corpus, pick two strategies, and compare outcomes over time.
+      </PageIntro>
 
-      <Block maxWidth="900px" margin="0 auto">
-        <Block
-          padding="scale700"
-          marginBottom="scale600"
-          backgroundColor="backgroundPrimary"
-          overrides={{
-            Block: {
-              style: ({ $theme }) => ({
-                borderLeft: '4px solid #10b981',
-                borderRadius: $theme.borders.radius200,
-              }),
-            },
-          }}
-        >
-          <LabelMedium marginBottom="scale300" $style={{ fontWeight: 600 }}>
-            Portfolio (shared)
-          </LabelMedium>
+      <PageCard>
+        <LabelMedium marginBottom="scale300" $style={{ fontWeight: 600 }}>
+          Portfolio (shared)
+        </LabelMedium>
           <Block
             padding="scale400"
             marginBottom="scale400"
@@ -592,11 +578,10 @@ export function StockSwpTab(): React.ReactElement {
               <LabelMedium marginLeft="scale400" color="negative">Start month must be before end month</LabelMedium>
             )}
           </Block>
-        </Block>
-      </Block>
+      </PageCard>
 
       {hasResults && swpResults != null && (
-        <Block maxWidth="90%" margin="0 auto">
+        <Block maxWidth="960px" margin="0 auto" width="100%">
           <StockPortfolioValueChart
             key="swp-portfolio-value"
             series={portfolioValueSeries}

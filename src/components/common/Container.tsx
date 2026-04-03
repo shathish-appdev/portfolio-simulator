@@ -5,11 +5,11 @@ interface ContainerProps {
   children: React.ReactNode;
 }
 
-export const Container: React.FC<ContainerProps> = ({ children }) => {
+export function Container({ children }: ContainerProps): React.ReactElement {
   return (
     <Block
       width="100%"
-      backgroundColor="white"
+      backgroundColor="backgroundSecondary"
       display="flex"
       flexDirection="column"
       minHeight="100vh"
@@ -17,4 +17,4 @@ export const Container: React.FC<ContainerProps> = ({ children }) => {
       {children}
     </Block>
   );
-}; 
+} 

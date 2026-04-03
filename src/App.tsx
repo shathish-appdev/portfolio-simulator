@@ -1,12 +1,11 @@
-import { AppNavBar } from "baseui/app-nav-bar";
 import { Block } from "baseui/block";
 import { ToasterContainer } from "baseui/toast";
 import React, { useEffect } from "react";
-import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Container } from "./components/common/Container";
 import { HelpDrawer, HelpProvider, useHelp } from "./components/help";
+import { AppHeader } from "./components/layout/AppHeader";
 import { BottomBar } from "./components/layout/BottomBar";
-import { TabBar } from "./components/layout/TabBar";
 import LumpsumSipCompare from './pages/LumpsumSipCompare';
 import { StockPriceTab } from "./pages/StockPriceTab";
 import { StockSipTab } from "./pages/StockSipTab";
@@ -17,7 +16,6 @@ import { setGlobalOpenHelp } from "./services/yahooFinanceService";
 import { trackPageView } from "./utils/analytics";
 
 const AppContent: React.FC = () => {
-  const navigate = useNavigate();
   const location = useLocation();
   const { openHelp } = useHelp();
 
@@ -43,63 +41,21 @@ const AppContent: React.FC = () => {
     <Container>
       <ToasterContainer autoHideDuration={5000} />
 
-      <AppNavBar
-        title="Portfolio Simulator"
-        mainItems={[
-          { label: "Lumpsum", active: isStockPriceTab },
-          { label: "SIP (Stocks)", active: isStockSipTab },
-          { label: "SWP (Stocks)", active: isStockSwpTab },
-          { label: "Yahoo Prices", active: isYahooStockPrice },
-          { label: "Weekly High/Low", active: isWeeklyHighLow },
-          { label: "Compare", active: isCompareTab },
-          { label: "Help", info: { id: "help" } },
-        ]}
-        onMainItemSelect={(item) => {
-          switch (item.label) {
-            case "Lumpsum":
-              navigate("/stock-price");
-              break;
-            case "SIP (Stocks)":
-              navigate("/stock-sip");
-              break;
-            case "SWP (Stocks)":
-              navigate("/stock-swp");
-              break;
-            case "Yahoo Prices":
-              navigate("/yahoo-stock-price");
-              break;
-            case "Weekly High/Low":
-              navigate("/weekly-high-low");
-              break;
-            case "Compare":
-              navigate("/compare");
-              break;
-            case "Help":
-              openHelp("getting-started");
-              break;
-            default:
-              break;
-          }
-        }}
-        overrides={{
-          Root: {
-            style: {
-              boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-            },
-          },
-        }}
-      />
+      <AppHeader />
 
       <Block
         position="relative"
-        backgroundColor="white"
-        padding="1.5rem"
         flex="1"
         display="flex"
         flexDirection="column"
+        width="100%"
+        maxWidth="1200px"
+        margin="0 auto"
+        paddingLeft={['scale300', 'scale400', 'scale600']}
+        paddingRight={['scale300', 'scale400', 'scale600']}
+        paddingTop="scale400"
+        paddingBottom="scale800"
       >
-        <TabBar onHelpClick={() => openHelp("getting-started")} />
-
         {/* Routes */}
         <Routes>
           <Route path="/" element={<Navigate to="/stock-price" replace />} />
