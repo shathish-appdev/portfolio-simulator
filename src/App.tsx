@@ -11,6 +11,7 @@ import LumpsumSipCompare from './pages/LumpsumSipCompare';
 import { StockPriceTab } from "./pages/StockPriceTab";
 import { StockSipTab } from "./pages/StockSipTab";
 import { StockSwpTab } from "./pages/StockSwpTab";
+import { WeeklyStockPricePage } from "./pages/WeeklyStockPricePage";
 import { YahooStockPrice } from "./pages/YahooStockPrice";
 import { setGlobalOpenHelp } from "./services/yahooFinanceService";
 import { trackPageView } from "./utils/analytics";
@@ -35,6 +36,7 @@ const AppContent: React.FC = () => {
   const isStockSipTab = location.pathname === "/stock-sip";
   const isStockSwpTab = location.pathname === "/stock-swp";
   const isYahooStockPrice = location.pathname === "/yahoo-stock-price";
+  const isWeeklyHighLow = location.pathname === "/weekly-high-low";
   const isCompareTab = location.pathname === "/compare";
 
   return (
@@ -48,6 +50,7 @@ const AppContent: React.FC = () => {
           { label: "SIP (Stocks)", active: isStockSipTab },
           { label: "SWP (Stocks)", active: isStockSwpTab },
           { label: "Yahoo Prices", active: isYahooStockPrice },
+          { label: "Weekly High/Low", active: isWeeklyHighLow },
           { label: "Compare", active: isCompareTab },
           { label: "Help", info: { id: "help" } },
         ]}
@@ -64,6 +67,9 @@ const AppContent: React.FC = () => {
               break;
             case "Yahoo Prices":
               navigate("/yahoo-stock-price");
+              break;
+            case "Weekly High/Low":
+              navigate("/weekly-high-low");
               break;
             case "Compare":
               navigate("/compare");
@@ -104,6 +110,7 @@ const AppContent: React.FC = () => {
           <Route path="/stock-sip" element={null} />
           <Route path="/stock-swp" element={null} />
           <Route path="/yahoo-stock-price" element={null} />
+          <Route path="/weekly-high-low" element={null} />
           <Route path="/compare" element={null} />
           <Route path="/portfolio" element={<Navigate to="/stock-price" replace />} />
         </Routes>
@@ -123,6 +130,10 @@ const AppContent: React.FC = () => {
 
           <Block display={isYahooStockPrice ? "block" : "none"} flex="1">
             <YahooStockPrice />
+          </Block>
+
+          <Block display={isWeeklyHighLow ? "block" : "none"} flex="1">
+            <WeeklyStockPricePage />
           </Block>
 
           <Block display={isCompareTab ? "block" : "none"} flex="1">

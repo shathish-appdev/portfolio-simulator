@@ -14,3 +14,13 @@ export interface ProcessedIndexData {
   date: Date;
   nav: number;
 }
+
+export interface ProcessedOHLCData {
+  date: Date;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  highDate?: Date;
+  lowDate?: Date;
+}

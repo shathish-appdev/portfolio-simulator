@@ -1,4 +1,4 @@
-import { ProcessedIndexData } from "../types/index";
+import { ProcessedIndexData, ProcessedOHLCData } from "../types/index";
 import { toaster } from "baseui/toast";
 import React from "react";
 
@@ -41,6 +41,12 @@ interface YahooFinanceResponse {
       timestamp: number[];
       indicators: {
         adjclose?: Array<{ adjclose: (number | null)[] }>;
+        quote?: Array<{
+          open: (number | null)[];
+          high: (number | null)[];
+          low: (number | null)[];
+          close: (number | null)[];
+        }>;
       };
     }>;
     error: any;
@@ -118,8 +124,79 @@ class YahooFinanceService {
     }
   }
 
-  clearCache(): void {
-    this.stockDataCache = {};
+  async fetchStockOHLCData(
+    symbol: string,
+    options?: FetchStockDataOptions
+  ): Promise<ProcessedOHLCData[]> {
+    const cacheKey = options?.startDate && options?.endDate
+      ? `${symbol}_ohlc_${options.startDate}_${options.endDate}`
+      : `${symbol}_ohlc`;
+    if (!options?.startDate || !options?.endDate) {
+      if (this.stockDataCache[cacheKey]) return this.stockDataCache[cacheKey] as ProcessedOHLCData[];
+    }
+
+    try {
+      let yahooUrl: string;
+      if (options?.startDate && options?.endDate) {
+        const period1 = Math.floor(new Date(options.startDate + "T00:00:00Z").getTime() / 1000);
+        const period2 = Math.floor(new Date(options.endDate + "T23:59:59Z").getTime() / 1000);
+        yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&period1=${period1}&period2=${period2}`;
+      } else {
+        yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=100y`;
+      }
+
+      const proxyUrl = `https://cors-proxy-lake-omega.vercel.app/api/proxy?url=${encodeURIComponent(
+        yahooUrl
+      )}`;
+
+      const response = await fetch(proxyUrl);
+
+      if (!response.ok) throw new Error(`Ticker "${symbol}" not found`);
+
+      const yahooData: YahooFinanceResponse = await response.json();
+
+      const chart = yahooData?.chart?.result?.[0];
+      if (!chart) throw new Error(`No data for ticker "${symbol}"`);
+
+      const timestamps = chart.timestamp || [];
+      const quote = chart.indicators.quote?.[0];
+      if (!quote) throw new Error(`No quote data for ticker "${symbol}"`);
+
+      const opens = quote.open || [];
+      const highs = quote.high || [];
+      const lows = quote.low || [];
+      const closes = quote.close || [];
+
+      const processed: ProcessedOHLCData[] = [];
+      for (let i = 0; i < timestamps.length; i++) {
+        const open = opens[i];
+        const high = highs[i];
+        const low = lows[i];
+        const close = closes[i];
+        if (open === null || high === null || low === null || close === null) continue;
+
+        const date = new Date(timestamps[i] * 1000);
+        processed.push({
+          date: new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())),
+          open,
+          high,
+          low,
+          close,
+        });
+      }
+
+      if (processed.length < 2) throw new Error(`Not enough valid data for ticker "${symbol}"`);
+
+      if (!options?.startDate || !options?.endDate) {
+        this.stockDataCache[cacheKey] = processed as any;
+      }
+      return processed;
+    } catch (err) {
+      const msg = `Error fetching Yahoo Finance ticker "${symbol}"`;
+      console.error(msg, err);
+      showErrorToast(msg);
+      throw err;
+    }
   }
 }
 
