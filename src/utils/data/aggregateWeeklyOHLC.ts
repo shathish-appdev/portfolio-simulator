@@ -70,3 +70,71 @@ export function aggregateWeeklyOHLC(dailyData: ProcessedOHLCData[]): ProcessedOH
 
   return weeklyData;
 }
+
+export function aggregateMonthlyOHLC(dailyData: ProcessedOHLCData[]): ProcessedOHLCData[] {
+  if (dailyData.length === 0) return [];
+
+  const monthlyData: ProcessedOHLCData[] = [];
+  let currentMonth: ProcessedOHLCData[] = [];
+  let currentMonthStart: Date | null = null;
+
+  const getMonthStart = (date: Date): Date => {
+    return new Date(date.getFullYear(), date.getMonth(), 1);
+  };
+
+  for (const day of dailyData) {
+    const monthStart = getMonthStart(day.date);
+
+    if (currentMonthStart === null || monthStart.getTime() !== currentMonthStart.getTime()) {
+      if (currentMonth.length > 0) {
+        // Aggregate previous month
+        const high = Math.max(...currentMonth.map(d => d.high));
+        const low = Math.min(...currentMonth.map(d => d.low));
+        const open = currentMonth[0].open;
+        const close = currentMonth[currentMonth.length - 1].close;
+
+        // Find the dates when high and low occurred
+        const highDate = currentMonth.find(d => d.high === high)?.date;
+        const lowDate = currentMonth.find(d => d.low === low)?.date;
+
+        monthlyData.push({
+          date: currentMonthStart!,
+          open,
+          high,
+          low,
+          close,
+          highDate,
+          lowDate,
+        });
+      }
+      currentMonth = [day];
+      currentMonthStart = monthStart;
+    } else {
+      currentMonth.push(day);
+    }
+  }
+
+  // Handle the last month
+  if (currentMonth.length > 0) {
+    const high = Math.max(...currentMonth.map(d => d.high));
+    const low = Math.min(...currentMonth.map(d => d.low));
+    const open = currentMonth[0].open;
+    const close = currentMonth[currentMonth.length - 1].close;
+
+    // Find the dates when high and low occurred
+    const highDate = currentMonth.find(d => d.high === high)?.date;
+    const lowDate = currentMonth.find(d => d.low === low)?.date;
+
+    monthlyData.push({
+      date: currentMonthStart!,
+      open,
+      high,
+      low,
+      close,
+      highDate,
+      lowDate,
+    });
+  }
+
+  return monthlyData;
+}
