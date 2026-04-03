@@ -1,12 +1,13 @@
 import { Block } from 'baseui/block';
 import { Button } from 'baseui/button';
 import { Input } from 'baseui/input';
+import { RadioGroup, Radio } from 'baseui/radio';
 import { LabelMedium } from 'baseui/typography';
 import React, { useState } from 'react';
 import { WeeklyHighLowChart } from '../components/charts/WeeklyHighLowChart';
 import { LoadingOverlay } from '../components/common/LoadingOverlay';
 import { yahooFinanceService } from '../services/yahooFinanceService';
-import { aggregateWeeklyOHLC } from '../utils/data/aggregateWeeklyOHLC';
+import { aggregateWeeklyOHLC, aggregateMonthlyOHLC } from '../utils/data/aggregateWeeklyOHLC';
 import { ProcessedOHLCData } from '../types/index';
 
 const dateInputStyle: React.CSSProperties = {
@@ -33,8 +34,9 @@ export const WeeklyStockPricePage: React.FC = () => {
   const [ticker, setTicker] = useState<string>('AAPL');
   const [startDate, setStartDate] = useState<string>(defaultStartDate());
   const [endDate, setEndDate] = useState<string>(defaultEndDate());
-  const [weeklyData, setWeeklyData] = useState<ProcessedOHLCData[]>([]);
+  const [data, setData] = useState<ProcessedOHLCData[]>([]);
   const [loading, setLoading] = useState(false);
+  const [viewType, setViewType] = useState<'weekly' | 'monthly'>('weekly');
 
   const isDateRangeInvalid = new Date(startDate) > new Date(endDate);
 
@@ -42,14 +44,18 @@ export const WeeklyStockPricePage: React.FC = () => {
     if (!ticker.trim() || isDateRangeInvalid) return;
 
     setLoading(true);
-    setWeeklyData([]);
+    setData([]);
     try {
       const dailyData = await yahooFinanceService.fetchStockOHLCData(ticker.trim().toUpperCase(), {
         startDate,
         endDate,
       });
-      const aggregatedData = aggregateWeeklyOHLC(dailyData);
-      setWeeklyData(aggregatedData);
+
+      const aggregatedData = viewType === 'weekly'
+        ? aggregateWeeklyOHLC(dailyData)
+        : aggregateMonthlyOHLC(dailyData);
+
+      setData(aggregatedData);
     } catch (error) {
       console.error('Error fetching stock data:', error);
     } finally {
@@ -63,7 +69,7 @@ export const WeeklyStockPricePage: React.FC = () => {
 
       <Block maxWidth="900px" margin="0 auto" marginBottom="scale400" paddingTop="0" display="flex" justifyContent="center">
         <LabelMedium color="contentTertiary" marginTop="0" marginBottom="0">
-          View weekly high and low prices for a stock
+          View {viewType === 'weekly' ? 'weekly' : 'monthly'} high and low prices for a stock
         </LabelMedium>
       </Block>
 
@@ -96,6 +102,19 @@ export const WeeklyStockPricePage: React.FC = () => {
             <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={dateInputStyle} />
             <LabelMedium marginBottom="0" marginTop="0">End Date</LabelMedium>
             <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={dateInputStyle} />
+            
+            <Block display="flex" flexDirection="column" marginLeft="scale400">
+              <LabelMedium marginBottom="scale200" marginTop="0">View Type</LabelMedium>
+              <RadioGroup
+                value={viewType}
+                onChange={(e) => setViewType(e.target.value as 'weekly' | 'monthly')}
+                name="view-type"
+              >
+                <Radio value="weekly">Weekly</Radio>
+                <Radio value="monthly">Monthly</Radio>
+              </RadioGroup>
+            </Block>
+            
             <Button kind="primary" onClick={handlePlot} disabled={!ticker.trim() || isDateRangeInvalid}>
               Plot
             </Button>
@@ -107,9 +126,9 @@ export const WeeklyStockPricePage: React.FC = () => {
           </Block>
         </Block>
 
-        {weeklyData.length > 0 && (
+        {data.length > 0 && (
           <Block maxWidth="90%" margin="0 auto">
-            <WeeklyHighLowChart data={weeklyData} ticker={ticker.trim().toUpperCase()} />
+            <WeeklyHighLowChart data={data} ticker={ticker.trim().toUpperCase()} viewType={viewType} />
           </Block>
         )}
       </Block>

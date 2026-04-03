@@ -9,6 +9,7 @@ import { ProcessedOHLCData } from '../../types/index';
 interface WeeklyHighLowChartProps {
   data: ProcessedOHLCData[];
   ticker: string;
+  viewType?: 'weekly' | 'monthly';
 }
 
 const formatPrice = (value: number): string => {
@@ -18,7 +19,7 @@ const formatPrice = (value: number): string => {
   return value.toFixed(6);
 };
 
-export const WeeklyHighLowChart: React.FC<WeeklyHighLowChartProps> = ({ data, ticker }) => {
+export const WeeklyHighLowChart: React.FC<WeeklyHighLowChartProps> = ({ data, ticker, viewType = 'weekly' }) => {
   const highSeries = {
     name: 'High',
     data: data.map(item => ({
@@ -46,7 +47,7 @@ export const WeeklyHighLowChart: React.FC<WeeklyHighLowChartProps> = ({ data, ti
   };
 
   const chartOptions = {
-    title: { text: `${ticker} - Weekly High/Low` },
+    title: { text: `${ticker} - ${viewType === 'weekly' ? 'Weekly' : 'Monthly'} High/Low` },
     credits: { enabled: false },
     chart: {
       backgroundColor: CHART_STYLES.colors.background,
@@ -94,7 +95,7 @@ export const WeeklyHighLowChart: React.FC<WeeklyHighLowChartProps> = ({ data, ti
       style: CHART_STYLES.tooltip,
       formatter: function (this: { x: number; points?: Array<{ y: number; series: { name: string; color: string }; point: { custom?: { highDate?: Date; lowDate?: Date } } }> }) {
         const dateStr = Highcharts.dateFormat('%e %b %Y', this.x);
-        let html = `<div style="font-size: 12px; color: #ffffff;"><strong>Week of ${dateStr}</strong><br/>`;
+        let html = `<div style="font-size: 12px; color: #ffffff;"><strong>${viewType === 'weekly' ? 'Week' : 'Month'} of ${dateStr}</strong><br/>`;
         const pts = (this.points || []).slice().sort((a: any, b: any) => (b.y as number) - (a.y as number));
         pts.forEach((p: any) => {
           const priceStr = formatPrice(p.y);
