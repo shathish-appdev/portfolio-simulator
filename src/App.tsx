@@ -10,6 +10,7 @@ import LumpsumSipCompare from './pages/LumpsumSipCompare';
 import { StockPriceTab } from "./pages/StockPriceTab";
 import { StockSipTab } from "./pages/StockSipTab";
 import { StockSwpTab } from "./pages/StockSwpTab";
+import { NetworthEstimatorPage } from "./pages/NetworthEstimatorPage";
 import { WeeklyStockPricePage } from "./pages/WeeklyStockPricePage";
 import { YahooStockPrice } from "./pages/YahooStockPrice";
 import { setGlobalOpenHelp } from "./services/yahooFinanceService";
@@ -36,6 +37,7 @@ const AppContent: React.FC = () => {
   const isYahooStockPrice = location.pathname === "/yahoo-stock-price";
   const isWeeklyHighLow = location.pathname === "/weekly-high-low";
   const isCompareTab = location.pathname === "/compare";
+  const isNetworthEstimator = location.pathname === "/networth-estimator";
 
   return (
     <Container>
@@ -68,6 +70,7 @@ const AppContent: React.FC = () => {
           <Route path="/yahoo-stock-price" element={null} />
           <Route path="/weekly-high-low" element={null} />
           <Route path="/compare" element={null} />
+          <Route path="/networth-estimator" element={null} />
           <Route path="/portfolio" element={<Navigate to="/stock-price" replace />} />
         </Routes>
 
@@ -94,6 +97,10 @@ const AppContent: React.FC = () => {
 
           <Block display={isCompareTab ? "block" : "none"} flex="1">
             <LumpsumSipCompare />
+          </Block>
+
+          <Block display={isNetworthEstimator ? "block" : "none"} flex="1">
+            <NetworthEstimatorPage />
           </Block>
         </>
       </Block>

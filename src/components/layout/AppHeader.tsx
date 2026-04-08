@@ -5,7 +5,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useHelp } from '../help';
 
 /**
- * Single top navigation (solid background for contrast). Base Web shows hamburger + drawer below `large` breakpoint.
+ * Top navigation on a light surface so the menu control stays visible on small screens.
  */
 export function AppHeader(): React.ReactElement {
   const navigate = useNavigate();
@@ -19,22 +19,22 @@ export function AppHeader(): React.ReactElement {
   const isYahooStockPrice = location.pathname === '/yahoo-stock-price';
   const isWeeklyHighLow = location.pathname === '/weekly-high-low';
   const isCompareTab = location.pathname === '/compare';
+  const isNetworthEstimator = location.pathname === '/networth-estimator';
 
   const overrides = useMemo(
     () => ({
       Root: {
         style: {
-          backgroundColor: '#0f172a',
-          borderBottom: '1px solid #1e293b',
-          boxShadow: '0 2px 8px rgba(15, 23, 42, 0.35)',
+          backgroundColor: theme.colors.backgroundSecondary,
+          borderBottom: `1px solid ${theme.colors.borderOpaque}`,
+          boxShadow: '0 1px 3px rgba(15, 23, 42, 0.08)',
         },
       },
       AppName: {
         style: {
-          color: '#f8fafc',
+          color: theme.colors.contentPrimary,
           fontWeight: 700,
           letterSpacing: '-0.03em',
-          textShadow: '0 1px 2px rgba(0,0,0,0.2)',
         },
       },
       DesktopMenu: {
@@ -62,7 +62,7 @@ export function AppHeader(): React.ReactElement {
       },
       MainMenuItem: {
         style: ({ $active }: { $active?: boolean }) => ({
-          color: '#f1f5f9',
+          color: theme.colors.contentPrimary,
           borderBottomWidth: 0,
           borderBottomStyle: 'none',
           marginLeft: theme.sizing.scale300,
@@ -72,23 +72,23 @@ export function AppHeader(): React.ReactElement {
           paddingLeft: theme.sizing.scale400,
           paddingRight: theme.sizing.scale400,
           borderRadius: theme.borders.radius300,
-          backgroundColor: $active ? 'rgba(255,255,255,0.22)' : 'transparent',
+          backgroundColor: $active ? theme.colors.backgroundTertiary : 'transparent',
           fontWeight: $active ? 700 : 500,
-          boxShadow: $active ? 'inset 0 0 0 1px rgba(255,255,255,0.35)' : 'none',
+          boxShadow: $active ? `inset 0 0 0 1px ${theme.colors.borderOpaque}` : 'none',
           ':hover': {
-            color: '#ffffff',
-            backgroundColor: 'rgba(255,255,255,0.14)',
+            color: theme.colors.contentPrimary,
+            backgroundColor: theme.colors.backgroundTertiary,
           },
         }),
       },
       SideMenuButton: {
         style: {
-          color: '#f8fafc',
+          color: theme.colors.contentPrimary,
         },
       },
       MobileDrawer: {
         style: {
-          backgroundColor: '#0f172a',
+          backgroundColor: theme.colors.backgroundPrimary,
         },
       },
     }),
@@ -105,6 +105,7 @@ export function AppHeader(): React.ReactElement {
         { label: 'Yahoo Prices', active: isYahooStockPrice },
         { label: 'Weekly High/Low', active: isWeeklyHighLow },
         { label: 'Compare', active: isCompareTab },
+        { label: 'Net worth', active: isNetworthEstimator },
         { label: 'Help', info: { id: 'help' } },
       ]}
       onMainItemSelect={(item) => {
@@ -126,6 +127,9 @@ export function AppHeader(): React.ReactElement {
             break;
           case 'Compare':
             navigate('/compare');
+            break;
+          case 'Net worth':
+            navigate('/networth-estimator');
             break;
           case 'Help':
             openHelp('getting-started');

@@ -15,6 +15,16 @@ interface StockPriceChartProps {
   ticker?: string;
   series?: StockSeries[];
   colors?: string[];
+  /** Single-series only: overrides chart title (default `${ticker} - Price`) */
+  chartTitle?: string;
+  /** Single-series only: y-axis title (default `Price`) */
+  valueAxisTitle?: string;
+  /** Single-series only: tooltip label (default `Price`) */
+  tooltipValueLabel?: string;
+  /** Multi-series: chart title (default `Portfolio - Price`) */
+  multiChartTitle?: string;
+  /** Multi-series: y-axis title (default `Price`) */
+  multiValueAxisTitle?: string;
 }
 
 const formatPrice = (value: number): string => {
@@ -31,6 +41,11 @@ export const StockPriceChart: React.FC<StockPriceChartProps> = ({
   ticker,
   series: seriesProp,
   colors = DEFAULT_COLORS,
+  chartTitle,
+  valueAxisTitle,
+  tooltipValueLabel,
+  multiChartTitle,
+  multiValueAxisTitle,
 }) => {
   const isMulti = seriesProp && seriesProp.length > 0;
   const chartSeries = isMulti
@@ -51,8 +66,14 @@ export const StockPriceChart: React.FC<StockPriceChartProps> = ({
         }]
       : [];
 
+  const singleTitle = chartTitle ?? `${ticker} - Price`;
+  const singleYTitle = valueAxisTitle ?? 'Price';
+  const singleTooltipLabel = tooltipValueLabel ?? 'Price';
+  const multiTitle = multiChartTitle ?? 'Portfolio - Price';
+  const multiYTitle = multiValueAxisTitle ?? 'Price';
+
   const chartOptions = {
-    title: { text: isMulti ? 'Portfolio - Price' : `${ticker} - Price` },
+    title: { text: isMulti ? multiTitle : singleTitle },
     credits: { enabled: false },
     chart: {
       backgroundColor: CHART_STYLES.colors.background,
@@ -72,7 +93,7 @@ export const StockPriceChart: React.FC<StockPriceChartProps> = ({
     yAxis: {
       opposite: false,
       title: {
-        text: 'Price',
+        text: isMulti ? multiYTitle : singleYTitle,
         align: 'middle',
         rotation: -90,
         x: -10,
@@ -113,7 +134,7 @@ export const StockPriceChart: React.FC<StockPriceChartProps> = ({
             const priceStr = formatPrice(this.y);
             return `<div style="font-size: 12px; color: #ffffff;">
               <strong>${dateStr}</strong><br/>
-              <span style="color:#007bff">●</span> <strong>Price:</strong> ${priceStr}
+              <span style="color:#007bff">●</span> <strong>${singleTooltipLabel}:</strong> ${priceStr}
             </div>`;
           },
     },

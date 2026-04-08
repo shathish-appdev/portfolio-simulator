@@ -132,7 +132,7 @@ class YahooFinanceService {
       ? `${symbol}_ohlc_${options.startDate}_${options.endDate}`
       : `${symbol}_ohlc`;
     if (!options?.startDate || !options?.endDate) {
-      if (this.stockDataCache[cacheKey]) return this.stockDataCache[cacheKey] as ProcessedOHLCData[];
+      if (this.stockDataCache[cacheKey]) return this.stockDataCache[cacheKey] as unknown as ProcessedOHLCData[];
     }
 
     try {
@@ -197,6 +197,10 @@ class YahooFinanceService {
       showErrorToast(msg);
       throw err;
     }
+  }
+
+  clearCache(): void {
+    this.stockDataCache = {};
   }
 }
 
