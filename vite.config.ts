@@ -5,7 +5,14 @@ export default defineConfig({
   plugins: [react()],
   base: '/portfolio-simulator/',
   server: {
-    sourcemapIgnoreList: false
+    sourcemapIgnoreList: false,    proxy: {
+      '/api/gemini': {
+        target: 'https://generativelanguage.googleapis.com',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/api\/gemini/, ''),
+      },
+    },
   },
   build: {
     sourcemap: true,

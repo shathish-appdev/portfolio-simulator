@@ -20,6 +20,7 @@ export function AppHeader(): React.ReactElement {
   const isWeeklyHighLow = location.pathname === '/weekly-high-low';
   const isCompareTab = location.pathname === '/compare';
   const isNetworthEstimator = location.pathname === '/networth-estimator';
+  const isNetworthEstimatorCopy = location.pathname === '/networth-estimator-copy';
 
   const overrides = useMemo(
     () => ({
@@ -106,6 +107,7 @@ export function AppHeader(): React.ReactElement {
         { label: 'Weekly High/Low', active: isWeeklyHighLow },
         { label: 'Compare', active: isCompareTab },
         { label: 'Net worth', active: isNetworthEstimator },
+        { label: 'Net worth copy', active: isNetworthEstimatorCopy },
         { label: 'Help', info: { id: 'help' } },
       ]}
       onMainItemSelect={(item) => {
@@ -130,6 +132,9 @@ export function AppHeader(): React.ReactElement {
             break;
           case 'Net worth':
             navigate('/networth-estimator');
+            break;
+          case 'Net worth copy':
+            navigate('/networth-estimator-copy');
             break;
           case 'Help':
             openHelp('getting-started');

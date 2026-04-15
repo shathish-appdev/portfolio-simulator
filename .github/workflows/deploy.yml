@@ -20,6 +20,10 @@ jobs:
           cache: 'npm'
 
       - name: Install and build
+        env:
+          VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
+          VITE_GEMINI_API_VERSION: v1beta
+          VITE_GEMINI_MODEL: gemini-2.5-flash
         run: |
           npm ci
           npm run build

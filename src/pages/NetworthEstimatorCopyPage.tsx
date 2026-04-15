@@ -1,8 +1,9 @@
-﻿import { Block } from 'baseui/block';
+import { Block } from 'baseui/block';
 import { Button } from 'baseui/button';
 import { Input } from 'baseui/input';
 import { LabelMedium, ParagraphMedium } from 'baseui/typography';
 import React, { useCallback, useMemo, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { useSearchParams } from 'react-router-dom';
 import { NetWorthStackedAreaChart } from '../components/charts/NetWorthStackedAreaChart';
 import { StockPriceChart } from '../components/charts/StockPriceChart';
@@ -19,6 +20,7 @@ import {
   mergeHoldingsByTicker,
   normalizePerTickerSeriesTo100,
 } from '../utils/data/netWorthSeries';
+import { sendNetworthDataToGemini } from '../services/geminiService';
 
 type HoldingRow = { id: string; ticker: string; units: string };
 
@@ -57,7 +59,7 @@ function serializeHoldings(rows: HoldingRow[]): string {
     .join(',');
 }
 
-export function NetworthEstimatorPage(): React.ReactElement {
+export function NetworthEstimatorCopyPage(): React.ReactElement {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [rows, setRows] = useState<HoldingRow[]>(() => parseHoldingsParam(searchParams.get('h')));
@@ -67,6 +69,8 @@ export function NetworthEstimatorPage(): React.ReactElement {
   const [byTickerSeries, setByTickerSeries] = useState<StockSeries[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [geminiPrompt, setGeminiPrompt] = useState('');
+  const [geminiResponse, setGeminiResponse] = useState<string | null>(null);
 
   const isDateInvalid = new Date(startDate) > new Date(endDate);
 
@@ -81,8 +85,10 @@ export function NetworthEstimatorPage(): React.ReactElement {
     return out;
   }, [rows]);
 
-  const handleFetch = useCallback(async () => {
+  const handleSend = useCallback(async () => {
     setError(null);
+    setGeminiResponse(null);
+
     if (holdingsParsed.length === 0) {
       setError(
         `Add at least one row with a ticker and a positive amount. Use ${USD_CASH_TICKER} for US dollars (units = dollars).`
@@ -91,6 +97,10 @@ export function NetworthEstimatorPage(): React.ReactElement {
     }
     if (isDateInvalid) {
       setError('Start date must be before or equal to end date.');
+      return;
+    }
+    if (!geminiPrompt.trim()) {
+      setError('Enter a Gemini prompt before sending.');
       return;
     }
 
@@ -126,14 +136,30 @@ export function NetworthEstimatorPage(): React.ReactElement {
         setError('Not enough overlapping price history for your holdings in this date range.');
         return;
       }
+
       setSeries(nw);
       setByTickerSeries(perHolding as StockSeries[]);
+
+      const payload = {
+        holdings: merged,
+        startDate,
+        endDate,
+        netWorthSeries: nw,
+        perHoldingSeries: perHolding,
+      };
+
+      try {
+        const geminiResult = await sendNetworthDataToGemini(geminiPrompt.trim(), payload);
+        setGeminiResponse(geminiResult);
+      } catch (geminiError) {
+        setError((geminiError as Error).message || 'Failed to send data to Gemini.');
+      }
     } catch (err) {
       setError((err as Error).message || 'Failed to load prices.');
     } finally {
       setLoading(false);
     }
-  }, [holdingsParsed, rows, startDate, endDate, isDateInvalid, setSearchParams]);
+  }, [holdingsParsed, rows, startDate, endDate, isDateInvalid, setSearchParams, geminiPrompt]);
 
   const dateInputStyle = {
     padding: '10px 12px',
@@ -163,7 +189,7 @@ export function NetworthEstimatorPage(): React.ReactElement {
       <LoadingOverlay active={loading} />
       <PageIntro title="Net worth estimator">
         Enter stock tickers and share counts (decimals allowed). Use the synthetic ticker <strong>{USD_CASH_TICKER}</strong> for US
-        dollar cash—units are dollars (e.g. 5000 = $5,000). Choose a date range, then load charts: total net worth, each holding’s
+        dollar cash-units are dollars (e.g. 5000 = $5,000). Choose a date range, then load charts: total net worth, each holding's
         value over time, a stacked view of contributions, and a relative-performance chart with each line indexed to 100 on the first
         date.
       </PageIntro>
@@ -202,6 +228,15 @@ export function NetworthEstimatorPage(): React.ReactElement {
         </Block>
 
         <Block display="flex" flexWrap="wrap" gridGap="scale500" marginBottom="scale400" alignItems="flex-end">
+          <Block display="flex" flexDirection="column" gridGap="scale100" flex="1" minWidth="240px">
+            <LabelMedium>Gemini prompt</LabelMedium>
+            <Input
+              value={geminiPrompt}
+              onChange={(e) => setGeminiPrompt((e.target as HTMLInputElement).value)}
+              placeholder="Ask Gemini about this portfolio"
+              size="compact"
+            />
+          </Block>
           <Block display="flex" flexDirection="column" gridGap="scale100">
             <LabelMedium>Start date</LabelMedium>
             <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={dateInputStyle} />
@@ -210,8 +245,13 @@ export function NetworthEstimatorPage(): React.ReactElement {
             <LabelMedium>End date</LabelMedium>
             <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={dateInputStyle} />
           </Block>
-          <Button kind="primary" onClick={() => void handleFetch()} isLoading={loading} disabled={isDateInvalid || loading}>
-            Load chart
+          <Button
+            kind="primary"
+            onClick={() => void handleSend()}
+            isLoading={loading}
+            disabled={!geminiPrompt.trim() || isDateInvalid || loading}
+          >
+            Send
           </Button>
         </Block>
 
@@ -249,9 +289,45 @@ export function NetworthEstimatorPage(): React.ReactElement {
           </>
         )}
 
+        {geminiResponse && (
+          <Block marginTop="scale600" overrides={{ Block: { style: { borderRadius: '16px', border: '1px solid #e0e7ff', background: 'linear-gradient(135deg, #f8faff 0%, #ffffff 100%)', boxShadow: '0 2px 12px rgba(79,70,229,0.07)', overflow: 'hidden' } } }}>
+            {/* Header bar */}
+            <Block display="flex" alignItems="center" padding="scale500" overrides={{ Block: { style: { borderBottom: '1px solid #e0e7ff', background: 'rgba(79,70,229,0.04)' } } }}>
+              <Block overrides={{ Block: { style: { width: '28px', height: '28px', borderRadius: '8px', background: 'linear-gradient(135deg, #4f46e5, #7c3aed)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: '10px', flexShrink: '0', fontSize: '14px', color: '#fff' } } }}>✦</Block>
+              <Block overrides={{ Block: { style: { fontWeight: '600', fontSize: '13px', color: '#4f46e5', letterSpacing: '0.02em', textTransform: 'uppercase' } } }}>AI Analysis</Block>
+            </Block>
+            {/* Content */}
+            <Block padding="scale600" overrides={{ Block: { style: { lineHeight: '1.7', color: '#1e293b', fontSize: '14px' } } }}>
+              <style>{`
+                .gemini-response h1,.gemini-response h2 { font-size: 1rem; font-weight: 700; margin: 1.1rem 0 0.4rem; color: #0f172a; padding-bottom: 4px; border-bottom: 1px solid #e0e7ff; }
+                .gemini-response h3 { font-size: 0.95rem; font-weight: 600; margin: 0.9rem 0 0.3rem; color: #3730a3; }
+                .gemini-response p { margin: 0.45rem 0; color: #334155; }
+                .gemini-response ul { padding-left: 1.2rem; margin: 0.4rem 0; list-style: none; }
+                .gemini-response ul li::before { content: '▸'; color: #6366f1; font-size: 0.75em; margin-right: 6px; }
+                .gemini-response ol { padding-left: 1.4rem; margin: 0.4rem 0; }
+                .gemini-response li { margin: 0.3rem 0; color: #334155; }
+                .gemini-response strong { font-weight: 600; color: #0f172a; }
+                .gemini-response em { font-style: italic; color: #475569; }
+                .gemini-response code { background: #ede9fe; padding: 2px 7px; border-radius: 5px; font-size: 0.82em; font-family: monospace; color: #4f46e5; }
+                .gemini-response pre { background: #1e1b4b; padding: 14px; border-radius: 10px; overflow-x: auto; font-size: 0.82em; margin: 0.8rem 0; }
+                .gemini-response pre code { background: none; padding: 0; color: #c7d2fe; }
+                .gemini-response blockquote { border-left: 3px solid #6366f1; padding: 6px 12px; color: #64748b; margin: 0.6rem 0; background: #f5f3ff; border-radius: 0 6px 6px 0; font-style: italic; }
+                .gemini-response table { border-collapse: collapse; width: 100%; margin: 0.8rem 0; font-size: 13px; }
+                .gemini-response th { background: #ede9fe; color: #3730a3; font-weight: 600; padding: 8px 12px; border: 1px solid #ddd6fe; }
+                .gemini-response td { padding: 7px 12px; border: 1px solid #e0e7ff; color: #334155; }
+                .gemini-response tr:nth-child(even) td { background: #f8f7ff; }
+                .gemini-response hr { border: none; border-top: 1px solid #e0e7ff; margin: 1rem 0; }
+              `}</style>
+              <div className="gemini-response">
+                <ReactMarkdown>{geminiResponse}</ReactMarkdown>
+              </div>
+            </Block>
+          </Block>
+        )}
+
         {series.length === 0 && !loading && !error && (
           <ParagraphMedium marginTop="scale400" color="contentSecondary">
-            Enter holdings and dates, then click Load chart.
+            Enter holdings and dates, then click Send.
           </ParagraphMedium>
         )}
       </PageCard>

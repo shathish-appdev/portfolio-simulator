@@ -11,6 +11,7 @@ import { StockPriceTab } from "./pages/StockPriceTab";
 import { StockSipTab } from "./pages/StockSipTab";
 import { StockSwpTab } from "./pages/StockSwpTab";
 import { NetworthEstimatorPage } from "./pages/NetworthEstimatorPage";
+import { NetworthEstimatorCopyPage } from "./pages/NetworthEstimatorCopyPage";
 import { WeeklyStockPricePage } from "./pages/WeeklyStockPricePage";
 import { YahooStockPrice } from "./pages/YahooStockPrice";
 import { setGlobalOpenHelp } from "./services/yahooFinanceService";
@@ -38,6 +39,7 @@ const AppContent: React.FC = () => {
   const isWeeklyHighLow = location.pathname === "/weekly-high-low";
   const isCompareTab = location.pathname === "/compare";
   const isNetworthEstimator = location.pathname === "/networth-estimator";
+  const isNetworthEstimatorCopy = location.pathname === "/networth-estimator-copy";
 
   return (
     <Container>
@@ -71,6 +73,7 @@ const AppContent: React.FC = () => {
           <Route path="/weekly-high-low" element={null} />
           <Route path="/compare" element={null} />
           <Route path="/networth-estimator" element={null} />
+          <Route path="/networth-estimator-copy" element={null} />
           <Route path="/portfolio" element={<Navigate to="/stock-price" replace />} />
         </Routes>
 
@@ -101,6 +104,10 @@ const AppContent: React.FC = () => {
 
           <Block display={isNetworthEstimator ? "block" : "none"} flex="1">
             <NetworthEstimatorPage />
+          </Block>
+
+          <Block display={isNetworthEstimatorCopy ? "block" : "none"} flex="1">
+            <NetworthEstimatorCopyPage />
           </Block>
         </>
       </Block>
