@@ -71,6 +71,8 @@ export function NetworthEstimatorCopyPage(): React.ReactElement {
   const [error, setError] = useState<string | null>(null);
   const [geminiPrompt, setGeminiPrompt] = useState('');
   const [geminiResponse, setGeminiResponse] = useState<string | null>(null);
+  const [geminiApiKey, setGeminiApiKey] = useState('');
+  const [showApiKey, setShowApiKey] = useState(false);
 
   const isDateInvalid = new Date(startDate) > new Date(endDate);
 
@@ -149,7 +151,7 @@ export function NetworthEstimatorCopyPage(): React.ReactElement {
       };
 
       try {
-        const geminiResult = await sendNetworthDataToGemini(geminiPrompt.trim(), payload);
+        const geminiResult = await sendNetworthDataToGemini(geminiPrompt.trim(), payload, geminiApiKey || undefined);
         setGeminiResponse(geminiResult);
       } catch (geminiError) {
         setError((geminiError as Error).message || 'Failed to send data to Gemini.');
@@ -159,7 +161,7 @@ export function NetworthEstimatorCopyPage(): React.ReactElement {
     } finally {
       setLoading(false);
     }
-  }, [holdingsParsed, rows, startDate, endDate, isDateInvalid, setSearchParams, geminiPrompt]);
+  }, [holdingsParsed, rows, startDate, endDate, isDateInvalid, setSearchParams, geminiPrompt, geminiApiKey]);
 
   const dateInputStyle = {
     padding: '10px 12px',
@@ -236,6 +238,22 @@ export function NetworthEstimatorCopyPage(): React.ReactElement {
               placeholder="Ask Gemini about this portfolio"
               size="compact"
             />
+          </Block>
+          <Block display="flex" flexDirection="column" gridGap="scale100" flex="1" minWidth="260px">
+            <LabelMedium>Gemini API key <span style={{ fontWeight: 400, color: '#64748b', fontSize: '12px' }}>(optional — overrides env key)</span></LabelMedium>
+            <Block display="flex" gridGap="scale200" alignItems="center">
+              <Input
+                value={geminiApiKey}
+                onChange={(e) => setGeminiApiKey((e.target as HTMLInputElement).value)}
+                placeholder="AIzaSy..."
+                size="compact"
+                type={showApiKey ? 'text' : 'password'}
+                overrides={{ Root: { style: { flex: '1' } } }}
+              />
+              <Button kind="tertiary" size="compact" onClick={() => setShowApiKey(v => !v)}>
+                {showApiKey ? 'Hide' : 'Show'}
+              </Button>
+            </Block>
           </Block>
           <Block display="flex" flexDirection="column" gridGap="scale100">
             <LabelMedium>Start date</LabelMedium>

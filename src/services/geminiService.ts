@@ -1,15 +1,16 @@
 export async function sendNetworthDataToGemini(
   promptText: string,
-  networthData: unknown
+  networthData: unknown,
+  userApiKey?: string
 ): Promise<string> {
-  const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY;
-  const model = (import.meta as any).env?.VITE_GEMINI_MODEL ?? 'gemini-2.0-flash';
+  const apiKey = userApiKey?.trim() || (import.meta as any).env?.VITE_GEMINI_API_KEY;
+  const model = (import.meta as any).env?.VITE_GEMINI_MODEL ?? 'gemma-3-4b-it';
   const apiVersion = (import.meta as any).env?.VITE_GEMINI_API_VERSION ?? 'v1beta';
   // Always call Gemini directly — the API supports browser CORS in both dev and production.
   const baseUrl = (import.meta as any).env?.VITE_GEMINI_API_BASE_URL ?? 'https://generativelanguage.googleapis.com';
 
   if (!apiKey) {
-    throw new Error('Gemini API key is not configured. Set VITE_GEMINI_API_KEY in your environment.');
+    throw new Error('Gemini API key is not configured. Enter your API key or set VITE_GEMINI_API_KEY in your environment.');
   }
 
   const requestBody = {
