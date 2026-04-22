@@ -12,6 +12,7 @@ import { StockSipTab } from "./pages/StockSipTab";
 import { StockSwpTab } from "./pages/StockSwpTab";
 import { NetworthEstimatorPage } from "./pages/NetworthEstimatorPage";
 import { NetworthEstimatorCopyPage } from "./pages/NetworthEstimatorCopyPage";
+import NetworthGoldPage from "./pages/NetworthGoldPage"; // ✅ FIXED (default import)
 import { WeeklyStockPricePage } from "./pages/WeeklyStockPricePage";
 import { YahooStockPrice } from "./pages/YahooStockPrice";
 import { setGlobalOpenHelp } from "./services/yahooFinanceService";
@@ -21,17 +22,15 @@ const AppContent: React.FC = () => {
   const location = useLocation();
   const { openHelp } = useHelp();
 
-  // Track page view
   useEffect(() => {
     trackPageView(location.pathname);
   }, [location.pathname]);
 
-  // Register help trigger globally
   useEffect(() => {
     setGlobalOpenHelp(openHelp);
   }, [openHelp]);
 
-  // Active tab detection
+  // Tabs
   const isStockPriceTab = location.pathname === "/stock-price";
   const isStockSipTab = location.pathname === "/stock-sip";
   const isStockSwpTab = location.pathname === "/stock-swp";
@@ -41,10 +40,12 @@ const AppContent: React.FC = () => {
   const isNetworthEstimator = location.pathname === "/networth-estimator";
   const isNetworthEstimatorCopy = location.pathname === "/networth-estimator-copy";
 
+  // ✅ NEW GOLD PAGE
+  const isNetworthGold = location.pathname === "/networth-gold";
+
   return (
     <Container>
       <ToasterContainer autoHideDuration={5000} />
-
       <AppHeader />
 
       <Block
@@ -74,6 +75,10 @@ const AppContent: React.FC = () => {
           <Route path="/compare" element={null} />
           <Route path="/networth-estimator" element={null} />
           <Route path="/networth-estimator-copy" element={null} />
+
+          {/* ✅ NEW ROUTE */}
+          <Route path="/networth-gold" element={null} />
+
           <Route path="/portfolio" element={<Navigate to="/stock-price" replace />} />
         </Routes>
 
@@ -109,11 +114,15 @@ const AppContent: React.FC = () => {
           <Block display={isNetworthEstimatorCopy ? "block" : "none"} flex="1">
             <NetworthEstimatorCopyPage />
           </Block>
+
+          {/* ✅ GOLD PAGE RENDER */}
+          <Block display={isNetworthGold ? "block" : "none"} flex="1">
+            <NetworthGoldPage />
+          </Block>
         </>
       </Block>
 
       <BottomBar />
-
       <HelpDrawer />
     </Container>
   );

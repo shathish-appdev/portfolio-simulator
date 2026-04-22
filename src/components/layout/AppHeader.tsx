@@ -21,6 +21,7 @@ export function AppHeader(): React.ReactElement {
   const isCompareTab = location.pathname === '/compare';
   const isNetworthEstimator = location.pathname === '/networth-estimator';
   const isNetworthEstimatorCopy = location.pathname === '/networth-estimator-copy';
+  const isNetworthGold = location.pathname === '/networth-gold';
 
   const overrides = useMemo(
     () => ({
@@ -108,6 +109,7 @@ export function AppHeader(): React.ReactElement {
         { label: 'Compare', active: isCompareTab },
         { label: 'Net worth', active: isNetworthEstimator },
         { label: 'Net worth copy', active: isNetworthEstimatorCopy },
+        { label: 'Net worth GOLD', active: isNetworthGold },
         { label: 'Help', info: { id: 'help' } },
       ]}
       onMainItemSelect={(item) => {
@@ -136,6 +138,9 @@ export function AppHeader(): React.ReactElement {
           case 'Net worth copy':
             navigate('/networth-estimator-copy');
             break;
+          case 'Net worth GOLD':
+            navigate('/networth-gold');
+              break;  
           case 'Help':
             openHelp('getting-started');
             break;
