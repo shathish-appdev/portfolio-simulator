@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Block } from 'baseui/block';
 import { Button } from 'baseui/button';
 import { Input } from 'baseui/input';
@@ -45,12 +45,34 @@ function formatDate(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
+// ✅ Parse URL → rows
+function parseHoldings(h: string | null): Row[] {
+  if (!h) return [newRow()];
+
+  return h.split(',').map((item) => {
+    const [ticker, units] = item.split(':');
+    return {
+      id: crypto.randomUUID?.() ?? String(Date.now()),
+      ticker: ticker || '',
+      units: units || '',
+    };
+  });
+}
+
+// ✅ Serialize rows → URL
+function serialize(rows: Row[]) {
+  return rows
+    .map((r) => (r.ticker && r.units ? `${r.ticker}:${r.units}` : ''))
+    .filter(Boolean)
+    .join(',');
+}
+
 export default function NetworthGoldPage(): React.ReactElement {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [rows, setRows] = useState<Row[]>([newRow()]);
-  const [startDate, setStartDate] = useState(searchParams.get('start') || defaultStartDate());
-  const [endDate, setEndDate] = useState(searchParams.get('end') || defaultEndDate());
+  const [startDate, setStartDate] = useState(defaultStartDate());
+  const [endDate, setEndDate] = useState(defaultEndDate());
 
   const [portfolioSeries, setPortfolioSeries] = useState<DataPoint[]>([]);
   const [stockSeries, setStockSeries] = useState<StockSeries[]>([]);
@@ -59,6 +81,7 @@ export default function NetworthGoldPage(): React.ReactElement {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // ✅ Parse inputs
   const parsed = useMemo(() => {
     return rows
       .map((r) => ({
@@ -67,6 +90,17 @@ export default function NetworthGoldPage(): React.ReactElement {
       }))
       .filter((r) => r.ticker && !Number.isNaN(r.units) && r.units > 0);
   }, [rows]);
+
+  // ✅ Sync URL → state (MAIN FIX)
+  useEffect(() => {
+    const h = searchParams.get('h');
+    const start = searchParams.get('start');
+    const end = searchParams.get('end');
+
+    if (h) setRows(parseHoldings(h));
+    if (start) setStartDate(start);
+    if (end) setEndDate(end);
+  }, [searchParams]);
 
   const updateRow = (id: string, key: 'ticker' | 'units', value: string) => {
     setRows((prev) =>
@@ -81,13 +115,6 @@ export default function NetworthGoldPage(): React.ReactElement {
     );
   };
 
-  function serialize(rows: Row[]) {
-    return rows
-      .map((r) => (r.ticker && r.units ? `${r.ticker}:${r.units}` : ''))
-      .filter(Boolean)
-      .join(',');
-  }
-
   const handleLoad = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -98,14 +125,19 @@ export default function NetworthGoldPage(): React.ReactElement {
         return;
       }
 
-      // ✅ Update URL (GET)
+      if (new Date(startDate) > new Date(endDate)) {
+        setError('Invalid date range.');
+        return;
+      }
+
+      // ✅ Update URL (GET params)
       const params = new URLSearchParams();
       params.set('start', startDate);
       params.set('end', endDate);
       params.set('h', serialize(rows));
       setSearchParams(params);
 
-      // 🪙 GLD
+      // 🪙 GLD data
       const gldData = await yahooFinanceService.fetchStockData('GLD', {
         startDate,
         endDate,
@@ -130,7 +162,7 @@ export default function NetworthGoldPage(): React.ReactElement {
 
       setGoldSeries(gldData);
 
-      // 🔥 KEY FIX: DATE MAP
+      // ✅ DATE ALIGNMENT (CRITICAL FIX)
       const gldMap = new Map(
         gldData.map((d) => [formatDate(new Date(d.date)), d.nav])
       );
@@ -139,7 +171,6 @@ export default function NetworthGoldPage(): React.ReactElement {
         new Map(series.map((d) => [formatDate(new Date(d.date)), d.nav]))
       );
 
-      // 🔥 COMMON DATES ONLY
       const commonDates = [...gldMap.keys()].filter((date) =>
         stockMaps.every((m) => m.has(date))
       );
@@ -149,7 +180,7 @@ export default function NetworthGoldPage(): React.ReactElement {
         return;
       }
 
-      // 💰 FINAL CORRECT CALCULATION
+      // ✅ FINAL CORRECT FORMULA
       const result: DataPoint[] = [];
 
       for (const date of commonDates) {
@@ -176,6 +207,13 @@ export default function NetworthGoldPage(): React.ReactElement {
       setLoading(false);
     }
   }, [parsed, startDate, endDate, rows, setSearchParams]);
+
+  // ✅ AUTO LOAD AFTER URL PARSE
+  useEffect(() => {
+    if (parsed.length > 0) {
+      handleLoad();
+    }
+  }, [parsed]);
 
   return (
     <Block position="relative">
@@ -227,9 +265,25 @@ export default function NetworthGoldPage(): React.ReactElement {
 
         {portfolioSeries.length >= 2 && (
           <>
-            <StockPriceChart series={stockSeries} multiChartTitle="Stock Prices" />
-            <StockPriceChart data={goldSeries} ticker="GLD" chartTitle="Gold Price" />
-            <StockPriceChart data={portfolioSeries} ticker="Portfolio" chartTitle="Portfolio in GOLD" />
+            <StockPriceChart
+              series={stockSeries}
+              multiChartTitle="Stock Prices"
+              multiValueAxisTitle="Price (USD)"
+            />
+
+            <StockPriceChart
+              data={goldSeries}
+              ticker="GLD"
+              chartTitle="Gold Price (GLD)"
+              valueAxisTitle="Price (USD)"
+            />
+
+            <StockPriceChart
+              data={portfolioSeries}
+              ticker="Portfolio (Gold)"
+              chartTitle="Portfolio in GOLD"
+              valueAxisTitle="Gold Units"
+            />
           </>
         )}
       </PageCard>
