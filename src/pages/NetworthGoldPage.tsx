@@ -1,8 +1,9 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Block } from 'baseui/block';
 import { Button } from 'baseui/button';
 import { Input } from 'baseui/input';
 import { LabelMedium, ParagraphMedium } from 'baseui/typography';
+import { useSearchParams } from 'react-router-dom';
 
 import { PageCard, PageIntro } from '../components/common/PageChrome';
 import { LoadingOverlay } from '../components/common/LoadingOverlay';
@@ -40,7 +41,35 @@ function defaultEndDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function formatDate(d: Date) {
+  return d.toISOString().slice(0, 10);
+}
+
+// ✅ Parse URL → rows
+function parseHoldings(h: string | null): Row[] {
+  if (!h) return [newRow()];
+
+  return h.split(',').map((item) => {
+    const [ticker, units] = item.split(':');
+    return {
+      id: crypto.randomUUID?.() ?? String(Date.now()),
+      ticker: ticker || '',
+      units: units || '',
+    };
+  });
+}
+
+// ✅ Serialize rows → URL
+function serialize(rows: Row[]) {
+  return rows
+    .map((r) => (r.ticker && r.units ? `${r.ticker}:${r.units}` : ''))
+    .filter(Boolean)
+    .join(',');
+}
+
 export default function NetworthGoldPage(): React.ReactElement {
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const [rows, setRows] = useState<Row[]>([newRow()]);
   const [startDate, setStartDate] = useState(defaultStartDate());
   const [endDate, setEndDate] = useState(defaultEndDate());
@@ -52,7 +81,7 @@ export default function NetworthGoldPage(): React.ReactElement {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // ✅ Parse input
+  // ✅ Parse inputs
   const parsed = useMemo(() => {
     return rows
       .map((r) => ({
@@ -61,6 +90,17 @@ export default function NetworthGoldPage(): React.ReactElement {
       }))
       .filter((r) => r.ticker && !Number.isNaN(r.units) && r.units > 0);
   }, [rows]);
+
+  // ✅ Sync URL → state (MAIN FIX)
+  useEffect(() => {
+    const h = searchParams.get('h');
+    const start = searchParams.get('start');
+    const end = searchParams.get('end');
+
+    if (h) setRows(parseHoldings(h));
+    if (start) setStartDate(start);
+    if (end) setEndDate(end);
+  }, [searchParams]);
 
   const updateRow = (id: string, key: 'ticker' | 'units', value: string) => {
     setRows((prev) =>
@@ -90,25 +130,20 @@ export default function NetworthGoldPage(): React.ReactElement {
         return;
       }
 
-      // ❗ Prevent wrong ticker
-      if (parsed.some((p) => p.ticker === 'GOLD')) {
-        setError('Use GLD for gold benchmark. "GOLD" is a stock.');
-        return;
-      }
+      // ✅ Update URL (GET params)
+      const params = new URLSearchParams();
+      params.set('start', startDate);
+      params.set('end', endDate);
+      params.set('h', serialize(rows));
+      setSearchParams(params);
 
-      // 🪙 Fetch GLD (gold benchmark)
-      const gldData: DataPoint[] =
-        await yahooFinanceService.fetchStockData('GLD', {
-          startDate,
-          endDate,
-        });
+      // 🪙 GLD data
+      const gldData = await yahooFinanceService.fetchStockData('GLD', {
+        startDate,
+        endDate,
+      });
 
-      if (!gldData || gldData.length < 2) {
-        setError('GLD data not available.');
-        return;
-      }
-
-      // 📈 Fetch stocks
+      // 📈 Stocks
       const stockResults = await Promise.all(
         parsed.map((p) =>
           yahooFinanceService.fetchStockData(p.ticker, {
@@ -118,42 +153,49 @@ export default function NetworthGoldPage(): React.ReactElement {
         )
       );
 
-      // 📊 Stock chart
-      const stockChart: StockSeries[] = parsed.map((p, i) => ({
-        ticker: p.ticker,
-        data: stockResults[i],
-      }));
-
-      setStockSeries(stockChart);
-      setGoldSeries(gldData);
-
-      // Align data
-      const minLength = Math.min(
-        gldData.length,
-        ...stockResults.map((s) => s.length)
+      setStockSeries(
+        parsed.map((p, i) => ({
+          ticker: p.ticker,
+          data: stockResults[i],
+        }))
       );
 
-      if (minLength < 2) {
+      setGoldSeries(gldData);
+
+      // ✅ DATE ALIGNMENT (CRITICAL FIX)
+      const gldMap = new Map(
+        gldData.map((d) => [formatDate(new Date(d.date)), d.nav])
+      );
+
+      const stockMaps = stockResults.map((series) =>
+        new Map(series.map((d) => [formatDate(new Date(d.date)), d.nav]))
+      );
+
+      const commonDates = [...gldMap.keys()].filter((date) =>
+        stockMaps.every((m) => m.has(date))
+      );
+
+      if (commonDates.length < 2) {
         setError('Not enough overlapping data.');
         return;
       }
 
-      // 💰 Portfolio in GOLD
+      // ✅ FINAL CORRECT FORMULA
       const result: DataPoint[] = [];
 
-      for (let i = 0; i < minLength; i++) {
+      for (const date of commonDates) {
         let totalUSD = 0;
 
-        for (let j = 0; j < stockResults.length; j++) {
-          totalUSD +=
-            (stockResults[j][i]?.nav ?? 0) * parsed[j].units;
+        for (let i = 0; i < stockMaps.length; i++) {
+          const price = stockMaps[i].get(date)!;
+          totalUSD += price * parsed[i].units;
         }
 
-        const gldPrice = gldData[i]?.nav ?? 1;
+        const gldPrice = gldMap.get(date)!;
 
         result.push({
-          date: gldData[i].date,
-          nav: totalUSD / gldPrice, // ✅ CORE LOGIC
+          date: new Date(date),
+          nav: totalUSD / gldPrice,
         });
       }
 
@@ -164,7 +206,14 @@ export default function NetworthGoldPage(): React.ReactElement {
     } finally {
       setLoading(false);
     }
-  }, [parsed, startDate, endDate]);
+  }, [parsed, startDate, endDate, rows, setSearchParams]);
+
+  // ✅ AUTO LOAD AFTER URL PARSE
+  useEffect(() => {
+    if (parsed.length > 0) {
+      handleLoad();
+    }
+  }, [parsed]);
 
   return (
     <Block position="relative">
@@ -175,17 +224,11 @@ export default function NetworthGoldPage(): React.ReactElement {
       </PageIntro>
 
       <PageCard>
-        {/* Holdings */}
         <Block marginBottom="scale500">
-          <LabelMedium marginBottom="scale200">Holdings</LabelMedium>
+          <LabelMedium>Holdings</LabelMedium>
 
           {rows.map((r) => (
-            <Block
-              key={r.id}
-              display="flex"
-              gridGap="scale300"
-              marginBottom="scale300"
-            >
+            <Block key={r.id} display="flex" gridGap="scale300" marginBottom="scale300">
               <Input
                 value={r.ticker}
                 placeholder="AAPL"
@@ -202,53 +245,32 @@ export default function NetworthGoldPage(): React.ReactElement {
                 }
               />
 
-              <Button kind="secondary" onClick={() => removeRow(r.id)}>
-                Remove
-              </Button>
+              <Button onClick={() => removeRow(r.id)}>Remove</Button>
             </Block>
           ))}
 
-          <Button kind="secondary" onClick={addRow}>
-            Add Holding
-          </Button>
+          <Button onClick={addRow}>Add Holding</Button>
         </Block>
 
-        {/* Dates */}
         <Block display="flex" gridGap="scale400" marginBottom="scale400">
-          <input
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-          />
-          <input
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-          />
+          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
 
           <Button onClick={handleLoad} isLoading={loading}>
             Load GOLD View
           </Button>
         </Block>
 
-        {/* Error */}
-        {error && (
-          <ParagraphMedium color="contentNegative">
-            {error}
-          </ParagraphMedium>
-        )}
+        {error && <ParagraphMedium color="contentNegative">{error}</ParagraphMedium>}
 
-        {/* Charts */}
         {portfolioSeries.length >= 2 && (
           <>
-            {/* 📈 Stocks */}
             <StockPriceChart
               series={stockSeries}
               multiChartTitle="Stock Prices"
               multiValueAxisTitle="Price (USD)"
             />
 
-            {/* 🪙 Gold */}
             <StockPriceChart
               data={goldSeries}
               ticker="GLD"
@@ -256,7 +278,6 @@ export default function NetworthGoldPage(): React.ReactElement {
               valueAxisTitle="Price (USD)"
             />
 
-            {/* 💰 Portfolio */}
             <StockPriceChart
               data={portfolioSeries}
               ticker="Portfolio (Gold)"
