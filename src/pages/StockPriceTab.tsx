@@ -144,6 +144,29 @@ function getPriceAtDate(data: Array<{ date: Date; nav: number }>, targetDate: Da
   return last.nav;
 }
 
+function formatDateForInput(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function addCalendarDays(dateStr: string, days: number): string {
+  const date = new Date(dateStr + 'T00:00:00Z');
+  date.setUTCDate(date.getUTCDate() + days);
+  return formatDateForInput(date);
+}
+
+function findTradingPointAtOrAfter(
+  data: Array<{ date: Date; nav: number }> | undefined,
+  targetDateStr: string
+): { date: Date; nav: number } | null {
+  if (!data?.length) return null;
+  const target = new Date(targetDateStr + 'T00:00:00Z').getTime();
+  return data.find((p) => p.date.getTime() >= target) ?? null;
+}
+
+function formatDisplayDate(date: Date | null | undefined): string {
+  return date ? formatDateForInput(date) : 'N/A';
+}
+
 function computePortfolioValueOverTime(
   portfolioSummary: Array<{ ticker: string; units: number }>,
   priceDataByTicker: Record<string, Array<{ date: Date; nav: number }>>
@@ -377,6 +400,9 @@ export const StockPriceTab: React.FC = () => {
   const [priceDataByTicker, setPriceDataByTicker] = useState<
     Record<string, Array<{ date: Date; nav: number }>>
   >({});
+  const [tradingDataByTicker, setTradingDataByTicker] = useState<
+    Record<string, Array<{ date: Date; nav: number }>>
+  >({});
   const [loading, setLoading] = useState(false);
   const [startDate, setStartDate] = useState<string>(
     () => initialFromUrl?.startDate ?? defaultStartDate()
@@ -455,6 +481,7 @@ export const StockPriceTab: React.FC = () => {
 
     setLoading(true);
     setPriceDataByTicker({});
+    setTradingDataByTicker({});
     try {
       const realTickers = uniqueTickers.filter((t) => !parseSyntheticTicker(t));
       const syntheticTickers = uniqueTickers
@@ -462,27 +489,36 @@ export const StockPriceTab: React.FC = () => {
         .filter((x): x is { ticker: string; parsed: { rate: number } } => x.parsed != null);
 
       const byTicker: Record<string, Array<{ date: Date; nav: number }>> = {};
+      const tradingByTicker: Record<string, Array<{ date: Date; nav: number }>> = {};
+      const fetchEndDate = addCalendarDays(endDate, 10);
+      const selectedEnd = new Date(endDate + 'T23:59:59Z').getTime();
 
       if (realTickers.length > 0) {
         const results = await Promise.allSettled(
           realTickers.map((t) =>
-            yahooFinanceService.fetchStockData(t, { startDate, endDate })
+            yahooFinanceService.fetchStockData(t, { startDate, endDate: fetchEndDate })
           )
         );
         results.forEach((result, i) => {
           const ticker = realTickers[i];
           if (result.status === 'fulfilled') {
-            byTicker[ticker] = fillMissingNavDates(result.value);
+            tradingByTicker[ticker] = result.value;
+            byTicker[ticker] = fillMissingNavDates(
+              result.value.filter((p) => p.date.getTime() <= selectedEnd)
+            );
           }
         });
       }
 
       syntheticTickers.forEach(({ ticker, parsed }) => {
         const data = generateSyntheticPriceData(startDate, endDate, parsed.rate);
+        const tradingData = generateSyntheticPriceData(startDate, fetchEndDate, parsed.rate);
         byTicker[ticker] = data;
+        tradingByTicker[ticker] = tradingData;
       });
 
       setPriceDataByTicker(byTicker);
+      setTradingDataByTicker(tradingByTicker);
       setChartKey((k) => k + 1);
       setSearchParams(serializeStockPriceParams(portfolios, startDate, endDate), { replace: true });
     } catch (error) {
@@ -501,13 +537,26 @@ export const StockPriceTab: React.FC = () => {
     const summary = validEntries
       .map((e) => {
         const ticker = e.ticker.trim().toUpperCase();
-        const data = priceDataByTicker[ticker];
+        const tradingData = tradingDataByTicker[ticker];
         const amount = parseFloat(e.amount) || 0;
-        const startPrice = data?.[0]?.nav ?? 0;
-        const endPrice = data?.length ? data[data.length - 1].nav : 0;
+        const buyPoint = findTradingPointAtOrAfter(tradingData, startDate);
+        const sellPoint = findTradingPointAtOrAfter(tradingData, endDate);
+        const startPrice = buyPoint?.nav ?? 0;
+        const endPrice = sellPoint?.nav ?? 0;
         const units = startPrice > 0 && amount > 0 ? amount / startPrice : null;
         const endValue = units != null && endPrice > 0 ? units * endPrice : null;
-        return { ticker, amount, startPrice, units, endValue };
+        return {
+          ticker,
+          amount,
+          userInvestDate: startDate,
+          actualInvestDate: buyPoint?.date ?? null,
+          startPrice,
+          userSellDate: endDate,
+          actualSellDate: sellPoint?.date ?? null,
+          endPrice,
+          units,
+          endValue,
+        };
       })
       .filter((s) => s.units != null);
 
@@ -521,16 +570,22 @@ export const StockPriceTab: React.FC = () => {
           )
         : [];
 
-    const investDate = valueData.length > 0 ? valueData[0].date : null;
-    const valueDate = valueData.length > 0 ? valueData[valueData.length - 1].date : null;
+    const investDate = summary.reduce<Date | null>((earliest, s) => {
+      if (!s.actualInvestDate) return earliest;
+      return !earliest || s.actualInvestDate.getTime() < earliest.getTime() ? s.actualInvestDate : earliest;
+    }, null);
+    const valueDate = summary.reduce<Date | null>((latest, s) => {
+      if (!s.actualSellDate) return latest;
+      return !latest || s.actualSellDate.getTime() > latest.getTime() ? s.actualSellDate : latest;
+    }, null);
 
     const summaryWithXirr = summary.map((s) => {
       if (s.units == null) {
         console.debug('summaryWithXirr: skipping entry with null units', { ticker: s.ticker, amount: s.amount, startPrice: s.startPrice });
       }
       const xirrVal =
-        investDate && valueDate && s.endValue != null && s.amount > 0
-          ? safeCalculateXirr(investDate, s.amount, valueDate, s.endValue, { portfolioName: p.name, ticker: s.ticker })
+        s.actualInvestDate && s.actualSellDate && s.endValue != null && s.amount > 0
+          ? safeCalculateXirr(s.actualInvestDate, s.amount, s.actualSellDate, s.endValue, { portfolioName: p.name, ticker: s.ticker })
           : null;
       return { ...s, xirr: xirrVal };
     });
@@ -623,7 +678,20 @@ export const StockPriceTab: React.FC = () => {
                   {result.portfolio.name}
                 </LabelMedium>
                 <Table
-                  columns={['Ticker', 'Investment ($)', 'Units', 'End Value ($)', 'Return (%)', 'XIRR (%)']}
+                  columns={[
+                    'Ticker',
+                    'Investment ($)',
+                    'User Investment Date',
+                    'Actual Buy Date',
+                    'Buy Price ($)',
+                    'Units',
+                    'User Selling Date',
+                    'Actual Sell Date',
+                    'Sell Price ($)',
+                    'End Value ($)',
+                    'Return (%)',
+                    'XIRR (%)',
+                  ]}
                   data={result.summary.map((s) => {
                     const returnPct = s.endValue != null && s.amount > 0 ? ((s.endValue - s.amount) / s.amount) * 100 : null;
                     const returnColor = returnPct != null ? (returnPct >= 0 ? '#16a34a' : '#dc2626') : undefined;
@@ -631,7 +699,17 @@ export const StockPriceTab: React.FC = () => {
                     return [
                       s.ticker,
                       s.amount.toLocaleString('en-US', { minimumFractionDigits: 2 }),
+                      s.userInvestDate,
+                      formatDisplayDate(s.actualInvestDate),
+                      s.startPrice > 0
+                        ? s.startPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                        : 'N/A',
                       s.units!.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 6 }),
+                      s.userSellDate,
+                      formatDisplayDate(s.actualSellDate),
+                      s.endPrice > 0
+                        ? s.endPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                        : 'N/A',
                       s.endValue != null ? s.endValue.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '—',
                       returnPct != null ? (
                         <span style={{ color: returnColor }}>{returnPct >= 0 ? '+' : ''}{returnPct.toFixed(1)}%</span>

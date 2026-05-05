@@ -7,12 +7,12 @@ import { HelpDrawer, HelpProvider, useHelp } from "./components/help";
 import { AppHeader } from "./components/layout/AppHeader";
 import { BottomBar } from "./components/layout/BottomBar";
 import LumpsumSipCompare from './pages/LumpsumSipCompare';
+import { NetworthEstimatorCopyPage } from "./pages/NetworthEstimatorCopyPage";
+import { NetworthEstimatorPage } from "./pages/NetworthEstimatorPage";
+import NetworthGoldPage from "./pages/NetworthGoldPage"; // ✅ FIXED (default import)
 import { StockPriceTab } from "./pages/StockPriceTab";
 import { StockSipTab } from "./pages/StockSipTab";
 import { StockSwpTab } from "./pages/StockSwpTab";
-import { NetworthEstimatorPage } from "./pages/NetworthEstimatorPage";
-import { NetworthEstimatorCopyPage } from "./pages/NetworthEstimatorCopyPage";
-import NetworthGoldPage from "./pages/NetworthGoldPage"; // ✅ FIXED (default import)
 import { WeeklyStockPricePage } from "./pages/WeeklyStockPricePage";
 import { YahooStockPrice } from "./pages/YahooStockPrice";
 import { setGlobalOpenHelp } from "./services/yahooFinanceService";
