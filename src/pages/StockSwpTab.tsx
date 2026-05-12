@@ -23,6 +23,17 @@ function getPriceAtDate(data: Array<{ date: Date; nav: number }>, targetDate: Da
   return last.nav;
 }
 
+function getActualTradingDate(
+  rawData: Array<{ date: Date; nav: number }>,
+  targetDate: Date
+): Date | null {
+  const t = targetDate.getTime();
+  for (const p of rawData) {
+    if (p.date.getTime() >= t) return p.date;
+  }
+  return null;
+}
+
 function parseSyntheticTicker(ticker: string): { rate: number } | null {
   const t = ticker.trim().toUpperCase();
   if (!t.startsWith('~')) return null;
@@ -301,6 +312,9 @@ export function StockSwpTab(): React.ReactElement {
   const [priceDataByTicker, setPriceDataByTicker] = useState<
     Record<string, Array<{ date: Date; nav: number }>>
   >({});
+  const [rawPriceDataByTicker, setRawPriceDataByTicker] = useState<
+    Record<string, Array<{ date: Date; nav: number }>>
+  >({});
   const [loading, setLoading] = useState(false);
   const [swpResults, setSwpResults] = useState<{
     strategyA: { valueData: Array<{ date: Date; value: number }>; withdrawalData: Array<{ date: Date; value: number }> };
@@ -417,6 +431,7 @@ export function StockSwpTab(): React.ReactElement {
 
     setLoading(true);
     setPriceDataByTicker({});
+    setRawPriceDataByTicker({});
     setSwpResults(null);
 
     try {
@@ -426,6 +441,7 @@ export function StockSwpTab(): React.ReactElement {
         .filter((x): x is { ticker: string; parsed: { rate: number } } => x.parsed != null);
 
       const byTicker: Record<string, Array<{ date: Date; nav: number }>> = {};
+      const rawByTicker: Record<string, Array<{ date: Date; nav: number }>> = {};
 
       if (realTickers.length > 0) {
         const results = await Promise.allSettled(
@@ -435,6 +451,7 @@ export function StockSwpTab(): React.ReactElement {
         );
         results.forEach((result, i) => {
           if (result.status === 'fulfilled') {
+            rawByTicker[realTickers[i]] = result.value;
             byTicker[realTickers[i]] = fillMissingNavDates(result.value);
           }
         });
@@ -445,6 +462,7 @@ export function StockSwpTab(): React.ReactElement {
       });
 
       setPriceDataByTicker(byTicker);
+      setRawPriceDataByTicker(rawByTicker);
 
       const months = getMonthsBetween(startMonth, endMonth);
       const investDate = new Date(months[0] + '-01T12:00:00Z');
@@ -617,6 +635,8 @@ export function StockSwpTab(): React.ReactElement {
             <Table
               columns={[
                 'Month',
+                'Scheduled Date',
+                'Executed Date',
                 'Strategy A Value ($)',
                 'Strategy A Withdrawal ($)',
                 'Strategy A Cumulative ($)',
@@ -633,17 +653,28 @@ export function StockSwpTab(): React.ReactElement {
                 const rows: React.ReactNode[][] = [];
                 let cumA = 0;
                 let cumB = 0;
+                const firstRealTicker = uniqueTickers.find((t) => !parseSyntheticTicker(t));
+                const tradingRawData = firstRealTicker ? rawPriceDataByTicker[firstRealTicker] : undefined;
                 for (let i = 0; i < len; i++) {
                   const d = va[i]?.date ?? vb[i]?.date;
                   const monthStr = d
                     ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
                     : '—';
+                  const scheduledDateStr = d
+                    ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+                    : '—';
+                  const executedD = d && tradingRawData ? getActualTradingDate(tradingRawData, d) : null;
+                  const executedDateStr = executedD
+                    ? `${executedD.getUTCFullYear()}-${String(executedD.getUTCMonth() + 1).padStart(2, '0')}-${String(executedD.getUTCDate()).padStart(2, '0')}`
+                    : (d ? scheduledDateStr : '—');
                   const wai = wa[i]?.value ?? 0;
                   const wbi = wb[i]?.value ?? 0;
                   cumA += wai;
                   cumB += wbi;
                   rows.push([
                     monthStr,
+                    scheduledDateStr,
+                    executedDateStr,
                     va[i]?.value != null ? va[i].value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—',
                     wa[i]?.value != null ? wa[i].value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00',
                     cumA.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
