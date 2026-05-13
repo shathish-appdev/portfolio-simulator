@@ -91,110 +91,6 @@ function monthToEndDate(monthStr: string): string {
   return `${monthStr}-${String(lastDay).padStart(2, '0')}`;
 }
 
-function formatDateForDisplay(date: Date | null | undefined): string {
-  return date ? date.toISOString().slice(0, 10) : 'N/A';
-}
-
-/**
- * Normalize date to start of UTC day (00:00:00.000 UTC).
- * Ensures consistent date comparisons regardless of time component.
- */
-function startOfUTCDay(date: Date): Date {
-  return new Date(Date.UTC(
-    date.getUTCFullYear(),
-    date.getUTCMonth(),
-    date.getUTCDate()
-  ));
-}
-
-/**
- * Check if two dates represent the same calendar day (ignoring time).
- */
-function isSameCalendarDay(date1: Date, date2: Date): boolean {
-  return startOfUTCDay(date1).getTime() === startOfUTCDay(date2).getTime();
-}
-
-/**
- * Normalize and sort price data by date.
- * Converts all dates to UTC day boundaries and sorts chronologically.
- * This prevents timezone-related date comparison bugs.
- */
-function normalizePriceData(data: Array<{ date: Date; nav: number }>): Array<{ date: Date; nav: number }> {
-  return data
-    .map((entry) => ({
-      date: startOfUTCDay(entry.date),
-      nav: entry.nav,
-    }))
-    .sort((a, b) => a.date.getTime() - b.date.getTime());
-}
-
-/**
- * Get the next trading day (skip weekends: Saturday=6, Sunday=0).
- * If the date is a weekday, return it; if weekend, return the following Monday.
- */
-function getNextTradingDay(date: Date): Date {
-  // Clone the date to avoid mutations
-  const tradingDate = new Date(date.getTime());
-  let dayOfWeek = tradingDate.getUTCDay();
-  
-  // Skip weekends: if Sunday (0), move to Monday; if Saturday (6), move to Monday
-  while (dayOfWeek === 0 || dayOfWeek === 6) {
-    tradingDate.setUTCDate(tradingDate.getUTCDate() + 1);
-    dayOfWeek = tradingDate.getUTCDay();
-  }
-  
-  return tradingDate;
-}
-
-/**
- * Find the first available date in price data for the target month.
- * Returns the earliest date Yahoo Finance has for that month.
- * No weekend/holiday logic - just the first date that exists in that month.
- */
-function getFirstAvailableTradingDate(targetDate: Date, priceData: Array<{ date: Date; nav: number }>): Date {
-  if (!priceData || priceData.length === 0) return targetDate;
-  
-  const targetMonth = targetDate.getUTCMonth();
-  const targetYear = targetDate.getUTCFullYear();
-  
-  // Find first date in priceData that matches the target month
-  for (const entry of priceData) {
-    if (
-      entry.date.getUTCFullYear() === targetYear &&
-      entry.date.getUTCMonth() === targetMonth
-    ) {
-      return entry.date;  // Return first date in that month
-    }
-  }
-  
-  // Fallback: return first available data if month not found
-  return priceData[0].date;
-}
-
-/**
- * Add months to a date, handling the same day in the target month.
- */
-function addMonths(date: Date, months: number): Date {
-  const result = new Date(date);
-  result.setMonth(result.getMonth() + months);
-  return result;
-}
-
-interface SipTransaction {
-  userInvestDate: string;
-  actualBuyDate: Date | null;
-  actualSellDate: Date | null;
-  ticker: string;
-  buyPrice: number;
-  sipAmount: number;
-  units: number;
-  endDate: string;
-  endPrice: number;
-  endValue: number;
-  returnAmount: number;
-  returnPercent: number;
-}
-
 interface PortfolioEntry {
   id: string;
   ticker: string;
@@ -442,15 +338,13 @@ export function StockSipTab(): React.ReactElement {
         );
         results.forEach((result, i) => {
           if (result.status === 'fulfilled') {
-            // Use only actual Yahoo Finance dates (don't fill missing dates)
-            // This ensures first date of month is actually from Yahoo, not forward-filled
-            byTicker[realTickers[i]] = normalizePriceData(result.value);
+            byTicker[realTickers[i]] = fillMissingNavDates(result.value);
           }
         });
       }
 
       syntheticTickers.forEach(({ ticker, parsed }) => {
-        byTicker[ticker] = normalizePriceData(generateSyntheticPriceData(startDateStr, endDateStr, parsed.rate));
+        byTicker[ticker] = generateSyntheticPriceData(startDateStr, endDateStr, parsed.rate);
       });
 
       setPriceDataByTicker(byTicker);
@@ -463,129 +357,74 @@ export function StockSipTab(): React.ReactElement {
   };
 
   const months = getMonthsBetween(startMonth, endMonth);
-  const endDate = new Date(endDateStr + 'T23:59:59Z');
 
   const portfolioResults = portfolios.map((p) => {
     const validEntries = p.entries.filter((e) => e.ticker.trim() && parseFloat(e.amount) > 0);
+    const sipTransactions: Array<{ date: Date; amount: number }> = [];
+    const unitsByTicker: Record<string, number> = {};
     let totalInvested = 0;
 
-    // Build transaction-level summary first (for XIRR calculation)
-    const transactions: SipTransaction[] = [];
-    
     validEntries.forEach((e) => {
       const ticker = e.ticker.trim().toUpperCase();
       const monthlyAmount = parseFloat(e.amount) || 0;
-      const data = priceDataByTicker[ticker];
+      unitsByTicker[ticker] = 0;
 
       months.forEach((monthStr) => {
-        const userInvestDateStr = monthToStartDate(monthStr);
-        const userInvestDate = new Date(monthStr + '-01T12:00:00Z');
+        const investDate = new Date(monthStr + '-01T12:00:00Z');
+        const data = priceDataByTicker[ticker];
         if (!data || data.length === 0) return;
-        const actualBuyDate = getFirstAvailableTradingDate(userInvestDate, data);
 
-        const buyPrice = getPriceAtDate(data, actualBuyDate);
-        if (buyPrice > 0 && monthlyAmount > 0) {
-          // Sell exactly 1 month after buy
-          const sellDate = addMonths(actualBuyDate, 1);
-          const actualSellDate = getFirstAvailableTradingDate(sellDate, data);
-          const endPrice = getPriceAtDate(data, actualSellDate);
-          const units = monthlyAmount / buyPrice;
-          const endValue = units * endPrice;
-          const returnAmount = endValue - monthlyAmount;
-          const returnPercent = monthlyAmount > 0 ? (returnAmount / monthlyAmount) * 100 : 0;
-
-          transactions.push({
-            userInvestDate: userInvestDateStr,
-            actualBuyDate,
-            actualSellDate,
-            ticker,
-            buyPrice,
-            sipAmount: monthlyAmount,
-            units,
-            endDate: formatDateForDisplay(actualSellDate),
-            endPrice,
-            endValue,
-            returnAmount,
-            returnPercent,
-          });
-          
+        const price = getPriceAtDate(data, investDate);
+        if (price > 0 && monthlyAmount > 0) {
+          unitsByTicker[ticker] += monthlyAmount / price;
           totalInvested += monthlyAmount;
+          sipTransactions.push({ date: investDate, amount: -monthlyAmount });
         }
       });
     });
 
-    // Build summary with XIRR calculations
+    const endDate = new Date(endDateStr + 'T23:59:59Z');
+    let totalEndValue = 0;
     const summary = validEntries
       .map((e) => {
         const ticker = e.ticker.trim().toUpperCase();
+        const data = priceDataByTicker[ticker];
         const monthlyAmount = parseFloat(e.amount) || 0;
-        const tickerTransactions = transactions.filter((t) => t.ticker === ticker);
-        
-        if (tickerTransactions.length === 0) return null;
-
-        const invested = tickerTransactions.reduce((sum, t) => sum + t.sipAmount, 0);
-        const endValue = tickerTransactions.reduce((sum, t) => sum + t.endValue, 0);
-        const totalUnits = tickerTransactions.reduce((sum, t) => sum + t.units, 0);
+        const units = unitsByTicker[ticker] ?? 0;
+        const endPrice = data?.length ? getPriceAtDate(data, endDate) : 0;
+        const endValue = units * endPrice;
+        totalEndValue += endValue;
+        const invested = monthlyAmount * months.length;
         const returnPct = invested > 0 ? ((endValue - invested) / invested) * 100 : null;
-
-        // Calculate XIRR for this ticker's SIP transactions
-        let tickerXirr: number | null = null;
-        if (tickerTransactions.length > 0 && invested > 0) {
-          try {
-            const xirrData = tickerTransactions
-              .map((t) => [
-                { amount: -t.sipAmount, when: t.actualBuyDate || new Date() },
-                { amount: t.endValue, when: t.actualSellDate || new Date() },
-              ])
-              .flat()
-              .sort((a, b) => a.when.getTime() - b.when.getTime());
-            tickerXirr = xirr(xirrData);
-          } catch {
-            // ignore XIRR calculation errors
-          }
-        }
-
-        return {
-          ticker,
-          amount: invested,
-          monthlyAmount,
-          units: totalUnits,
-          endValue,
-          returnPct,
-          firstMonth: months[0],
-          lastMonth: months[months.length - 1],
-          firstPrice: tickerTransactions[0]?.buyPrice ?? 0,
-          lastPrice: tickerTransactions[tickerTransactions.length - 1]?.endPrice ?? 0,
-          xirr: tickerXirr,
-        };
+        return { ticker, amount: invested, monthlyAmount, units, endValue, returnPct };
       })
-      .filter((s): s is Exclude<typeof s, null> => s !== null);
+      .filter((s) => s.units > 0);
 
-    // Calculate total XIRR for portfolio
+    sipTransactions.sort((a, b) => a.date.getTime() - b.date.getTime());
+    const uniqueByDate = new Map<string, number>();
+    sipTransactions.forEach((t) => {
+      const key = t.date.toISOString().slice(0, 10);
+      uniqueByDate.set(key, (uniqueByDate.get(key) ?? 0) + t.amount);
+    });
+    const xirrTransactions = [
+      ...Array.from(uniqueByDate.entries()).map(([d, amt]) => ({ amount: amt, when: new Date(d) })),
+      { amount: totalEndValue, when: endDate },
+    ].sort((a, b) => a.when.getTime() - b.when.getTime());
+
     let totalXirr: number | null = null;
-    let totalEndValue = 0;
-    if (transactions.length > 0) {
-      try {
-        const xirrTransactions = transactions
-          .map((t) => [
-            { amount: -t.sipAmount, when: t.actualBuyDate || new Date() },
-            { amount: t.endValue, when: t.actualSellDate || new Date() },
-          ])
-          .flat()
-          .sort((a, b) => a.when.getTime() - b.when.getTime());
-        totalXirr = xirr(xirrTransactions);
-        totalEndValue = transactions.reduce((sum, t) => sum + t.endValue, 0);
-      } catch {
-        // ignore
-      }
+    try {
+      totalXirr = xirr(xirrTransactions);
+    } catch {
+      // ignore
     }
 
-    // Build valueData with open positions at each month-end
+    // Build valueData with cumulative units per month (correct SIP simulation)
     const valueData: Array<{ date: Date; value: number }> = [];
     const monthlyBreakdown: Array<{
       month: string;
       ticker: string;
       price: number;
+      /** Closing (lookup) price on last calendar day of month — used with accumulated units for Value ($). */
       monthEndPrice: number;
       sipAmount: number;
       unitsBought: number;
@@ -595,78 +434,59 @@ export function StockSipTab(): React.ReactElement {
       value: number;
       returnPct: number | null;
     }> = [];
+    let cumulativeUnitsByTicker: Record<string, number> = {};
+    let cumulativeInvested = 0;
 
     months.forEach((monthStr) => {
       const lastDay = localMonthEndDateTime(monthStr);
-      const monthEndDate = new Date(monthStr + '-01T12:00:00Z');
-      
-      // Find all transactions that are open on this date (bought <= this date, sold > this date)
-      const openTransactions = transactions.filter((t) => {
-        const buyDate = t.actualBuyDate ? t.actualBuyDate.getTime() : 0;
-        const sellDate = t.actualSellDate ? t.actualSellDate.getTime() : Infinity;
-        return buyDate <= lastDay.getTime() && sellDate > lastDay.getTime();
-      });
+      const investDate = new Date(monthStr + '-01T12:00:00Z');
 
-      // Calculate portfolio value from open positions
-      let monthValue = 0;
-      const transactionsByTicker: Record<string, typeof transactions> = {};
-      const unitsByTicker: Record<string, number> = {};
-
-      openTransactions.forEach((t) => {
-        if (!transactionsByTicker[t.ticker]) transactionsByTicker[t.ticker] = [];
-        transactionsByTicker[t.ticker].push(t);
-        unitsByTicker[t.ticker] = (unitsByTicker[t.ticker] ?? 0) + t.units;
-        
-        const data = priceDataByTicker[t.ticker];
-        if (data) {
-          const priceOnLastDay = getPriceAtDate(data, lastDay);
-          monthValue += t.units * priceOnLastDay;
+      let monthInvestment = 0;
+      validEntries.forEach((e) => {
+        const ticker = e.ticker.trim().toUpperCase();
+        const monthlyAmount = parseFloat(e.amount) || 0;
+        const data = priceDataByTicker[ticker];
+        if (!data || data.length === 0) return;
+        const price = getPriceAtDate(data, investDate);
+        if (price > 0 && monthlyAmount > 0) {
+          const unitsBought = monthlyAmount / price;
+          cumulativeUnitsByTicker[ticker] = (cumulativeUnitsByTicker[ticker] ?? 0) + unitsBought;
+          monthInvestment += monthlyAmount;
         }
       });
+      cumulativeInvested += monthInvestment;
 
-      const cumulativeInvested = transactions
-        .filter((t) => t.actualBuyDate && t.actualBuyDate.getTime() <= lastDay.getTime())
-        .reduce((sum, t) => sum + t.sipAmount, 0);
+      const value = Object.entries(cumulativeUnitsByTicker).reduce((sum, [ticker, units]) => {
+        const data = priceDataByTicker[ticker];
+        if (!data) return sum;
+        return sum + units * getPriceAtDate(data, lastDay);
+      }, 0);
 
-      if (monthValue > 0 || cumulativeInvested > 0) {
-        valueData.push({ date: lastDay, value: monthValue });
-      }
-
-      const returnPct = cumulativeInvested > 0 ? ((monthValue - cumulativeInvested) / cumulativeInvested) * 100 : null;
+      valueData.push({ date: lastDay, value });
+      const returnPct = cumulativeInvested > 0 ? ((value - cumulativeInvested) / cumulativeInvested) * 100 : null;
 
       validEntries.forEach((e) => {
         const ticker = e.ticker.trim().toUpperCase();
         const monthlyAmount = parseFloat(e.amount) || 0;
         const data = priceDataByTicker[ticker];
         if (!data || data.length === 0) return;
-
-        const monthTransaction = transactions.find(
-          (t) => t.ticker === ticker && 
-                 t.userInvestDate === monthToStartDate(monthStr) &&
-                 t.sipAmount === monthlyAmount
-        );
-
-        if (monthTransaction) {
-          const monthEndPrice = getPriceAtDate(data, lastDay);
-          const tickerOpenUnits = unitsByTicker[ticker] ?? 0;
-          const monthInvestment = transactions
-            .filter((t) => t.actualBuyDate && t.actualBuyDate.getTime() <= lastDay.getTime() && t.ticker === ticker)
-            .reduce((sum, t) => sum + t.sipAmount, 0) / (monthlyAmount * months.length) * monthlyAmount;
-
-          monthlyBreakdown.push({
-            month: monthStr,
-            ticker,
-            price: monthTransaction.buyPrice,
-            monthEndPrice,
-            sipAmount: monthlyAmount,
-            unitsBought: monthTransaction.units,
-            accumulatedUnits: tickerOpenUnits,
-            investment: monthlyAmount,
-            cumulativeInvested,
-            value: monthValue,
-            returnPct,
-          });
-        }
+        const price = getPriceAtDate(data, investDate);
+        const monthEndPrice = getPriceAtDate(data, lastDay);
+        const unitsBought = price > 0 && monthlyAmount > 0 ? monthlyAmount / price : 0;
+        const accumulatedUnits = cumulativeUnitsByTicker[ticker] ?? 0;
+        monthlyBreakdown.push({
+          month: monthStr,
+          ticker,
+          price,
+          monthEndPrice,
+          sipAmount: monthlyAmount,
+          unitsBought,
+          accumulatedUnits,
+          investment: monthInvestment,
+          cumulativeInvested,
+          value,
+          returnPct,
+        });
       });
     });
 
@@ -678,7 +498,6 @@ export function StockSipTab(): React.ReactElement {
       totalXirr,
       valueData,
       monthlyBreakdown,
-      transactions,
     };
   });
 
@@ -762,57 +581,20 @@ export function StockSipTab(): React.ReactElement {
                   {result.portfolio.name}
                 </LabelMedium>
                 <Table
-                  columns={[
-                    'Ticker',
-                    'Investment ($)',
-                    'User Investment Start Date',
-                    'Actual Buy Start Date',
-                    'Buy Price ($)',
-                    'Units',
-                    'User Selling End Date',
-                    'Actual Sell End Date',
-                    'Sell Price ($)',
-                    'End Value ($)',
-                    'Return (%)',
-                    'XIRR (%)',
-                  ]}
-                  data={result.summary.map((s) => {
-                    const returnColor = s.returnPct != null ? (s.returnPct >= 0 ? '#16a34a' : '#dc2626') : undefined;
-                    const xirrColor = s.xirr != null ? (s.xirr >= 0 ? '#16a34a' : '#dc2626') : undefined;
-                    const tickerTransactions = result.transactions.filter((t) => t.ticker === s.ticker).sort((a, b) => new Date(a.userInvestDate).getTime() - new Date(b.userInvestDate).getTime());
-                    const firstTransaction = tickerTransactions[0];
-                    const lastTransaction = tickerTransactions[tickerTransactions.length - 1];
-                    const userInvestDate = firstTransaction ? firstTransaction.userInvestDate : 'N/A';
-                    const actualBuyDate = firstTransaction ? formatDateForDisplay(firstTransaction.actualBuyDate) : 'N/A';
-                    const buyPrice = firstTransaction ? firstTransaction.buyPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A';
-                    const userSellingDate = lastTransaction ? endDateStr : 'N/A';
-                    const actualSellDate = lastTransaction ? formatDateForDisplay(lastTransaction.actualSellDate) : 'N/A';
-                    const sellPrice = lastTransaction ? lastTransaction.endPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A';
-                    return [
-                      s.ticker,
-                      s.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-                      userInvestDate,
-                      actualBuyDate,
-                      buyPrice,
-                      s.units.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 6 }),
-                      userSellingDate,
-                      actualSellDate,
-                      sellPrice,
-                      s.endValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-                      s.returnPct != null ? (
-                        <span style={{ color: returnColor }}>
-                          {(s.returnPct >= 0 ? '+' : '')}{s.returnPct.toFixed(1)}%
-                        </span>
-                      ) : (
-                        '—'
-                      ),
-                      s.xirr != null ? (
-                        <span style={{ color: xirrColor }}>{(s.xirr * 100).toFixed(1)}%</span>
-                      ) : (
-                        '—'
-                      ),
-                    ];
-                  })}
+                  columns={['Ticker', 'Invested ($)', 'Units', 'End Value ($)', 'Return (%)']}
+                  data={result.summary.map((s) => [
+                    s.ticker,
+                    s.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                    s.units.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                    s.endValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                    s.returnPct != null ? (
+                      <span style={{ color: s.returnPct >= 0 ? '#16a34a' : '#dc2626' }}>
+                        {(s.returnPct >= 0 ? '+' : '')}{s.returnPct.toFixed(2)}%
+                      </span>
+                    ) : (
+                      '—'
+                    ),
+                  ])}
                   divider="horizontal"
                   size="compact"
                 />
@@ -899,59 +681,6 @@ export function StockSipTab(): React.ReactElement {
                     '—'
                   ),
                 ])}
-                divider="horizontal"
-                size="compact"
-              />
-            </Block>
-          ))}
-
-          {portfolioResults.filter((r) => r.transactions.length > 0).map((result) => (
-            <Block
-              key={`txn-details-${result.portfolio.id}`}
-              marginTop="scale700"
-              padding="scale500"
-              backgroundColor="backgroundSecondary"
-              overrides={{
-                Block: {
-                  style: ({ $theme }) => ({
-                    borderRadius: $theme.borders.radius200,
-                    overflowX: 'auto',
-                  }),
-                },
-              }}
-            >
-              <LabelMedium marginBottom="scale400" $style={{ fontWeight: 600 }}>
-                {result.portfolio.name} – Transaction Details
-              </LabelMedium>
-              <ParagraphMedium marginTop="0" marginBottom="scale300" color="contentSecondary" $style={{ fontSize: '13px' }}>
-                Individual transaction details: each monthly investment shown with its buy date and corresponding prices.
-              </ParagraphMedium>
-              <Table
-                columns={[
-                  'Ticker',
-                  'User Investment Start Date',
-                  'Actual Buy Start Date',
-                  'Buy Price ($)',
-                  'SIP Amount ($)',
-                  'Units',
-                  'End Value ($)',
-                  'Return (%)',
-                ]}
-                data={result.transactions.map((tx) => {
-                  const returnColor = tx.returnPercent >= 0 ? '#16a34a' : '#dc2626';
-                  return [
-                    tx.ticker,
-                    tx.userInvestDate,
-                    formatDateForDisplay(tx.actualBuyDate),
-                    tx.buyPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-                    tx.sipAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-                    tx.units.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 6 }),
-                    tx.endValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-                    <span style={{ color: returnColor }}>
-                      {(tx.returnPercent >= 0 ? '+' : '')}{tx.returnPercent.toFixed(2)}%
-                    </span>,
-                  ];
-                })}
                 divider="horizontal"
                 size="compact"
               />
