@@ -24,6 +24,33 @@ function getPriceAtDate(data: Array<{ date: Date; nav: number }>, targetDate: Da
   return last.nav;
 }
 
+function getEntryAtDate(data: Array<{ date: Date; nav: number }>, targetDate: Date): { date: Date; nav: number } {
+  const t = targetDate.getTime();
+  let last = data[0];
+  for (const p of data) {
+    if (p.date.getTime() <= t) last = p;
+    else break;
+  }
+  return last;
+}
+
+function getNextTradingEntry(
+  data: Array<{ date: Date; nav: number }>,
+  targetDate: Date
+): { date: Date; nav: number } | null {
+  const t = targetDate.getTime();
+  let startIdx = -1;
+  for (let i = 0; i < data.length; i++) {
+    if (data[i].date.getTime() >= t) { startIdx = i; break; }
+  }
+  if (startIdx === -1) return null;
+  // fillMissingNavDates forward-fills non-trading days with the NEXT real trading day's price.
+  // The actual trading day is the LAST entry in the block of identical prices.
+  let i = startIdx;
+  while (i + 1 < data.length && data[i + 1].nav === data[i].nav) i++;
+  return data[i];
+}
+
 /**
  * End of the last calendar day for YYYY-MM in local time. Using start-of-day made
  * getPriceAtDate miss same-day closes (e.g. Jan 31 close is after Jan 31 00:00).
@@ -396,7 +423,23 @@ export function StockSipTab(): React.ReactElement {
         totalEndValue += endValue;
         const invested = monthlyAmount * months.length;
         const returnPct = invested > 0 ? ((endValue - invested) / invested) * 100 : null;
-        return { ticker, amount: invested, monthlyAmount, units, endValue, returnPct };
+        const firstInvestDate = new Date(months[0] + '-01T12:00:00Z');
+        const buyEntry = data?.length ? getEntryAtDate(data, firstInvestDate) : null;
+        const sellEntry = data?.length ? getEntryAtDate(data, endDate) : null;
+        return {
+          ticker,
+          amount: invested,
+          monthlyAmount,
+          units,
+          endValue,
+          returnPct,
+          userInvestmentDate: months[0] + '-01',
+          actualBuyDate: buyEntry?.date ?? null,
+          buyPrice: buyEntry?.nav ?? 0,
+          userSellingDate: endDateStr,
+          actualSellDate: sellEntry?.date ?? null,
+          sellPrice: sellEntry?.nav ?? 0,
+        };
       })
       .filter((s) => s.units > 0);
 
@@ -490,6 +533,55 @@ export function StockSipTab(): React.ReactElement {
       });
     });
 
+    const transactionDetails: Array<{
+      month: string;
+      ticker: string;
+      investment: number;
+      userInvestmentStartDate: string;
+      actualBuyStartDate: string | null;
+      buyPrice: number;
+      units: number;
+      endValue: number;
+      returnPct: number | null;
+      xirr: number | null;
+    }> = [];
+
+    validEntries.forEach((e) => {
+      const ticker = e.ticker.trim().toUpperCase();
+      const data = priceDataByTicker[ticker];
+      const monthlyAmount = parseFloat(e.amount) || 0;
+      if (!data || data.length === 0 || monthlyAmount <= 0) return;
+      const endPriceForTicker = getPriceAtDate(data, endDate);
+      months.forEach((monthStr) => {
+        const buyEntry = getNextTradingEntry(data, new Date(monthStr + '-01T00:00:00Z'));
+        if (!buyEntry || buyEntry.nav <= 0) return;
+        const units = monthlyAmount / buyEntry.nav;
+        const endValue = units * endPriceForTicker;
+        const returnPct = ((endValue - monthlyAmount) / monthlyAmount) * 100;
+        let rowXirr: number | null = null;
+        try {
+          if (buyEntry.date.getTime() < endDate.getTime()) {
+            rowXirr = xirr([
+              { amount: -monthlyAmount, when: buyEntry.date },
+              { amount: endValue, when: endDate },
+            ]);
+          }
+        } catch { /* ignore */ }
+        transactionDetails.push({
+          month: monthStr,
+          ticker,
+          investment: monthlyAmount,
+          userInvestmentStartDate: monthStr + '-01',
+          actualBuyStartDate: buyEntry.date.toISOString().slice(0, 10),
+          buyPrice: buyEntry.nav,
+          units,
+          endValue,
+          returnPct,
+          xirr: rowXirr,
+        });
+      });
+    });
+
     return {
       portfolio: p,
       summary,
@@ -498,6 +590,7 @@ export function StockSipTab(): React.ReactElement {
       totalXirr,
       valueData,
       monthlyBreakdown,
+      transactionDetails,
     };
   });
 
@@ -581,11 +674,17 @@ export function StockSipTab(): React.ReactElement {
                   {result.portfolio.name}
                 </LabelMedium>
                 <Table
-                  columns={['Ticker', 'Invested ($)', 'Units', 'End Value ($)', 'Return (%)']}
+                  columns={['Ticker', 'Invested ($)', 'User Investment Date', 'Actual Buy Date', 'Buy Price ($)', 'Units', 'User Selling Date', 'Actual Sell Date', 'Sell Price ($)', 'End Value ($)', 'Return (%)']}
                   data={result.summary.map((s) => [
                     s.ticker,
                     s.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                    s.userInvestmentDate,
+                    s.actualBuyDate ? s.actualBuyDate.toISOString().slice(0, 10) : '—',
+                    s.buyPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
                     s.units.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                    s.userSellingDate,
+                    s.actualSellDate ? s.actualSellDate.toISOString().slice(0, 10) : '—',
+                    s.sellPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
                     s.endValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
                     s.returnPct != null ? (
                       <span style={{ color: s.returnPct >= 0 ? '#16a34a' : '#dc2626' }}>
@@ -680,6 +779,64 @@ export function StockSipTab(): React.ReactElement {
                   ) : (
                     '—'
                   ),
+                ])}
+                divider="horizontal"
+                size="compact"
+              />
+            </Block>
+          ))}
+
+          {portfolioResults.filter((r) => r.transactionDetails.length > 0).map((result) => (
+            <Block
+              key={result.portfolio.id + '-txn'}
+              marginTop="scale700"
+              padding="scale500"
+              backgroundColor="backgroundSecondary"
+              overrides={{
+                Block: {
+                  style: ({ $theme }) => ({
+                    borderRadius: $theme.borders.radius200,
+                    overflowX: 'auto',
+                  }),
+                },
+              }}
+            >
+              <LabelMedium marginBottom="scale400" $style={{ fontWeight: 600 }}>
+                {result.portfolio.name} – Transaction Details
+              </LabelMedium>
+              <ParagraphMedium marginTop="0" marginBottom="scale300" color="contentSecondary" $style={{ fontSize: '13px' }}>
+                Per month per ticker: User Investment Start Date = 1st of month; Actual Buy Start Date = first available trading day on or after the 1st in Yahoo Finance data. End Value and Return are based on each installment's units valued at the final period end price.
+              </ParagraphMedium>
+              <Table
+                columns={[
+                  'Ticker',
+                  'Investment ($)',
+                  'User Investment Start Date',
+                  'Actual Buy Start Date',
+                  'Buy Price ($)',
+                  'Units',
+                  'End Value ($)',
+                  'Return (%)',
+                  'XIRR (%)',
+                ]}
+                data={result.transactionDetails.map((row) => [
+                  row.ticker,
+                  row.investment.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                  row.userInvestmentStartDate,
+                  row.actualBuyStartDate ?? '—',
+                  row.buyPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                  row.units.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 }),
+                  row.endValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                  row.returnPct != null ? (
+                    <span style={{ color: row.returnPct >= 0 ? '#16a34a' : '#dc2626' }}>
+                      {(row.returnPct >= 0 ? '+' : '')}{row.returnPct.toFixed(2)}%
+                    </span>
+                  ) : '—',
+                  row.xirr != null ? (
+                    <span style={{ color: row.xirr >= 0 ? '#16a34a' : '#dc2626' }}>
+                      {(row.xirr >= 0 ? '+' : '')}{(row.xirr * 100).toFixed(2)}%
+                    </span>
+                  ) : '—',
                 ])}
                 divider="horizontal"
                 size="compact"
