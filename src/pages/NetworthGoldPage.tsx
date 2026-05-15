@@ -208,13 +208,6 @@ export default function NetworthGoldPage(): React.ReactElement {
     }
   }, [parsed, startDate, endDate, rows, setSearchParams]);
 
-  // ✅ AUTO LOAD AFTER URL PARSE
-  useEffect(() => {
-    if (parsed.length > 0) {
-      handleLoad();
-    }
-  }, [parsed]);
-
   return (
     <Block position="relative">
       <LoadingOverlay active={loading} />

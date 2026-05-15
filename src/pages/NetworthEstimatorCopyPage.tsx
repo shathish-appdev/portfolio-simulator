@@ -21,6 +21,10 @@ import {
   normalizePerTickerSeriesTo100,
 } from '../utils/data/netWorthSeries';
 import { sendNetworthDataToGemini } from '../services/geminiService';
+import { sendNetworthDataToChatGPT } from '../services/chatgptService';
+import { sendNetworthDataToClaude } from '../services/claudeService';
+
+type AiProvider = 'gemini' | 'chatgpt' | 'claude';
 
 type HoldingRow = { id: string; ticker: string; units: string };
 
@@ -69,10 +73,15 @@ export function NetworthEstimatorCopyPage(): React.ReactElement {
   const [byTickerSeries, setByTickerSeries] = useState<StockSeries[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<AiProvider>('gemini');
   const [geminiPrompt, setGeminiPrompt] = useState('');
   const [geminiResponse, setGeminiResponse] = useState<string | null>(null);
   const [geminiApiKey, setGeminiApiKey] = useState('');
+  const [chatgptApiKey, setChatgptApiKey] = useState('');
+  const [claudeApiKey, setClaudeApiKey] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
+  const [showChatgptApiKey, setShowChatgptApiKey] = useState(false);
+  const [showClaudeApiKey, setShowClaudeApiKey] = useState(false);
 
   const isDateInvalid = new Date(startDate) > new Date(endDate);
 
@@ -102,7 +111,7 @@ export function NetworthEstimatorCopyPage(): React.ReactElement {
       return;
     }
     if (!geminiPrompt.trim()) {
-      setError('Enter a Gemini prompt before sending.');
+      setError('Enter a prompt before sending.');
       return;
     }
 
@@ -151,17 +160,24 @@ export function NetworthEstimatorCopyPage(): React.ReactElement {
       };
 
       try {
-        const geminiResult = await sendNetworthDataToGemini(geminiPrompt.trim(), payload, geminiApiKey || undefined);
-        setGeminiResponse(geminiResult);
-      } catch (geminiError) {
-        setError((geminiError as Error).message || 'Failed to send data to Gemini.');
+        let aiResult: string;
+        if (selectedProvider === 'chatgpt') {
+          aiResult = await sendNetworthDataToChatGPT(geminiPrompt.trim(), payload, chatgptApiKey || undefined);
+        } else if (selectedProvider === 'claude') {
+          aiResult = await sendNetworthDataToClaude(geminiPrompt.trim(), payload, claudeApiKey || undefined);
+        } else {
+          aiResult = await sendNetworthDataToGemini(geminiPrompt.trim(), payload, geminiApiKey || undefined);
+        }
+        setGeminiResponse(aiResult);
+      } catch (aiError) {
+        setError((aiError as Error).message || 'Failed to send data to AI.');
       }
     } catch (err) {
       setError((err as Error).message || 'Failed to load prices.');
     } finally {
       setLoading(false);
     }
-  }, [holdingsParsed, rows, startDate, endDate, isDateInvalid, setSearchParams, geminiPrompt, geminiApiKey]);
+  }, [holdingsParsed, rows, startDate, endDate, isDateInvalid, setSearchParams, geminiPrompt, selectedProvider, geminiApiKey, chatgptApiKey, claudeApiKey]);
 
   const dateInputStyle = {
     padding: '10px 12px',
@@ -231,29 +247,76 @@ export function NetworthEstimatorCopyPage(): React.ReactElement {
 
         <Block display="flex" flexWrap="wrap" gridGap="scale500" marginBottom="scale400" alignItems="flex-end">
           <Block display="flex" flexDirection="column" gridGap="scale100" flex="1" minWidth="240px">
-            <LabelMedium>Gemini prompt</LabelMedium>
+            <LabelMedium>AI prompt</LabelMedium>
             <Input
               value={geminiPrompt}
               onChange={(e) => setGeminiPrompt((e.target as HTMLInputElement).value)}
-              placeholder="Ask Gemini about this portfolio"
+              placeholder={`Ask ${selectedProvider === 'chatgpt' ? 'ChatGPT' : selectedProvider === 'claude' ? 'Claude' : 'Gemini'} about this portfolio`}
               size="compact"
             />
           </Block>
+          <Block display="flex" flexDirection="column" gridGap="scale100" minWidth="120px">
+            <LabelMedium>AI provider</LabelMedium>
+            <select
+              value={selectedProvider}
+              onChange={(e) => setSelectedProvider(e.target.value as AiProvider)}
+              style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '14px', fontFamily: 'inherit', backgroundColor: '#fff' }}
+            >
+              <option value="gemini">Gemini</option>
+              <option value="chatgpt">ChatGPT</option>
+              <option value="claude">Claude</option>
+            </select>
+          </Block>
           <Block display="flex" flexDirection="column" gridGap="scale100" flex="1" minWidth="260px">
-            <LabelMedium>Gemini API key <span style={{ fontWeight: 400, color: '#64748b', fontSize: '12px' }}>(optional — overrides env key)</span></LabelMedium>
-            <Block display="flex" gridGap="scale200" alignItems="center">
-              <Input
-                value={geminiApiKey}
-                onChange={(e) => setGeminiApiKey((e.target as HTMLInputElement).value)}
-                placeholder="AIzaSy..."
-                size="compact"
-                type={showApiKey ? 'text' : 'password'}
-                overrides={{ Root: { style: { flex: '1' } } }}
-              />
-              <Button kind="tertiary" size="compact" onClick={() => setShowApiKey(v => !v)}>
-                {showApiKey ? 'Hide' : 'Show'}
-              </Button>
-            </Block>
+            <LabelMedium>
+              {selectedProvider === 'chatgpt' ? 'ChatGPT' : selectedProvider === 'claude' ? 'Claude' : 'Gemini'} API key{' '}
+              <span style={{ fontWeight: 400, color: '#64748b', fontSize: '12px' }}>(optional — overrides env key)</span>
+            </LabelMedium>
+            {selectedProvider === 'gemini' && (
+              <Block display="flex" gridGap="scale200" alignItems="center">
+                <Input
+                  value={geminiApiKey}
+                  onChange={(e) => setGeminiApiKey((e.target as HTMLInputElement).value)}
+                  placeholder="AIzaSy..."
+                  size="compact"
+                  type={showApiKey ? 'text' : 'password'}
+                  overrides={{ Root: { style: { flex: '1' } } }}
+                />
+                <Button kind="tertiary" size="compact" onClick={() => setShowApiKey(v => !v)}>
+                  {showApiKey ? 'Hide' : 'Show'}
+                </Button>
+              </Block>
+            )}
+            {selectedProvider === 'chatgpt' && (
+              <Block display="flex" gridGap="scale200" alignItems="center">
+                <Input
+                  value={chatgptApiKey}
+                  onChange={(e) => setChatgptApiKey((e.target as HTMLInputElement).value)}
+                  placeholder="sk-..."
+                  size="compact"
+                  type={showChatgptApiKey ? 'text' : 'password'}
+                  overrides={{ Root: { style: { flex: '1' } } }}
+                />
+                <Button kind="tertiary" size="compact" onClick={() => setShowChatgptApiKey(v => !v)}>
+                  {showChatgptApiKey ? 'Hide' : 'Show'}
+                </Button>
+              </Block>
+            )}
+            {selectedProvider === 'claude' && (
+              <Block display="flex" gridGap="scale200" alignItems="center">
+                <Input
+                  value={claudeApiKey}
+                  onChange={(e) => setClaudeApiKey((e.target as HTMLInputElement).value)}
+                  placeholder="sk-ant-..."
+                  size="compact"
+                  type={showClaudeApiKey ? 'text' : 'password'}
+                  overrides={{ Root: { style: { flex: '1' } } }}
+                />
+                <Button kind="tertiary" size="compact" onClick={() => setShowClaudeApiKey(v => !v)}>
+                  {showClaudeApiKey ? 'Hide' : 'Show'}
+                </Button>
+              </Block>
+            )}
           </Block>
           <Block display="flex" flexDirection="column" gridGap="scale100">
             <LabelMedium>Start date</LabelMedium>

@@ -108,7 +108,7 @@ export function AppHeader(): React.ReactElement {
         { label: 'Weekly High/Low', active: isWeeklyHighLow },
         { label: 'Compare', active: isCompareTab },
         { label: 'Net worth', active: isNetworthEstimator },
-        { label: 'Net worth copy', active: isNetworthEstimatorCopy },
+        { label: 'Networth AI', active: isNetworthEstimatorCopy },
         { label: 'Net worth GOLD', active: isNetworthGold },
         { label: 'Help', info: { id: 'help' } },
       ]}
@@ -135,7 +135,7 @@ export function AppHeader(): React.ReactElement {
           case 'Net worth':
             navigate('/networth-estimator');
             break;
-          case 'Net worth copy':
+          case 'Networth AI':
             navigate('/networth-estimator-copy');
             break;
           case 'Net worth GOLD':

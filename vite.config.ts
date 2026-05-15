@@ -13,6 +13,12 @@ export default defineConfig({
         secure: true,
         rewrite: (path) => path.replace(/^\/api\/gemini/, ''),
       },
+      '/api/claude': {
+        target: 'https://api.anthropic.com',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/api\/claude/, ''),
+      },
     },
   },
   build: {
