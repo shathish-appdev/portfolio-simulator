@@ -2,10 +2,12 @@ import { Block } from 'baseui/block';
 import { Button } from 'baseui/button';
 import { Input } from 'baseui/input';
 import { Table } from 'baseui/table-semantic';
-import { LabelMedium, ParagraphMedium } from 'baseui/typography';
+import { LabelMedium, ParagraphSmall } from 'baseui/typography';
+import Highcharts from 'highcharts/esm/highcharts';
+import 'highcharts/esm/modules/heatmap';
+import HighchartsReact from 'highcharts-react-official';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import xirr from 'xirr';
 import { LoadingOverlay } from '../components/common/LoadingOverlay';
 import { PageCard, PageIntro } from '../components/common/PageChrome';
 import { StockPriceChart } from '../components/charts/StockPriceChart';
@@ -24,12 +26,6 @@ function getPriceAtDate(data: Array<{ date: Date; nav: number }>, targetDate: Da
     else break;
   }
   return last.nav;
-}
-
-function localMonthEndDateTime(monthStr: string): Date {
-  const [y, m] = monthStr.split('-').map(Number);
-  const lastDayNum = new Date(y, m, 0).getDate();
-  return new Date(y, m - 1, lastDayNum, 23, 59, 59, 999);
 }
 
 function getMonthsBetween(startMonth: string, endMonth: string): string[] {
@@ -54,6 +50,37 @@ function monthToEndDate(monthStr: string): string {
   const [y, m] = monthStr.split('-').map(Number);
   const lastDay = new Date(y, m, 0).getDate();
   return `${monthStr}-${String(lastDay).padStart(2, '0')}`;
+}
+
+function addMonths(monthStr: string, delta: number): string {
+  const [y, m] = monthStr.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function formatMonthLabel(monthStr: string): string {
+  const [y, m] = monthStr.split('-').map(Number);
+  const d = new Date(y, m - 1, 1);
+  return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+}
+
+function formatDateAsMonth(date: Date): string {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  return `${year}-${month}`;
+}
+
+function downloadJsonFile(payload: unknown, filename: string): void {
+  const json = JSON.stringify(payload, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
 }
 
 function parseSyntheticTicker(ticker: string): { rate: number } | null {
@@ -100,6 +127,19 @@ function defaultEndMonth(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
+function clampDurationMonths(value: number, fallback = 1): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(12, Math.max(1, Math.floor(value)));
+}
+
+function getDurationBuckets(durationFrom: number, durationTo: number): number[] {
+  const from = Math.min(durationFrom, durationTo);
+  const to = Math.max(durationFrom, durationTo);
+  const buckets: number[] = [];
+  for (let d = from; d <= to; d++) buckets.push(d);
+  return buckets;
+}
+
 /* ─────────────── types ─────────────── */
 
 interface PortfolioEntry {
@@ -116,13 +156,20 @@ function parseCompareParams(searchParams: URLSearchParams): {
   entries: PortfolioEntry[];
   startMonth: string;
   endMonth: string;
+  durationFrom: number;
+  durationTo: number;
 } | null {
   const p = searchParams.get('p');
   const pa = searchParams.get('pa');
   const pb = searchParams.get('pb');
   const startMonth = searchParams.get('startMonth');
   const endMonth = searchParams.get('endMonth');
-  if (!p && !pa && !pb && !startMonth && !endMonth) return null;
+  const durationFromRaw = searchParams.get('durationFrom');
+  const durationToRaw = searchParams.get('durationTo');
+  const simulationStepMonthsRaw = searchParams.get('simulationStepMonths');
+  if (!p && !pa && !pb && !startMonth && !endMonth && !durationFromRaw && !durationToRaw && !simulationStepMonthsRaw) {
+    return null;
+  }
 
   const parseEntries = (s: string | null): PortfolioEntry[] => {
     if (!s?.trim()) return [{ id: crypto.randomUUID?.() ?? String(Date.now()), ticker: '', amount: '' }];
@@ -140,17 +187,31 @@ function parseCompareParams(searchParams: URLSearchParams): {
   const rawHoldings = [p, pa, pb].find((s) => s?.trim()) ?? null;
   const entries = parseEntries(rawHoldings);
 
+  const legacyStep = simulationStepMonthsRaw != null ? clampDurationMonths(Number(simulationStepMonthsRaw), 1) : null;
+  const durationFrom = clampDurationMonths(
+    durationFromRaw != null ? Number(durationFromRaw) : (legacyStep ?? 1),
+    1
+  );
+  const durationTo = clampDurationMonths(
+    durationToRaw != null ? Number(durationToRaw) : (legacyStep ?? durationFrom),
+    durationFrom
+  );
+
   return {
     entries: entries.length ? entries : [{ id: crypto.randomUUID?.() ?? '1', ticker: '', amount: '' }],
     startMonth: startMonth && /^\d{4}-\d{2}$/.test(startMonth) ? startMonth : defaultStartMonth(),
     endMonth: endMonth && /^\d{4}-\d{2}$/.test(endMonth) ? endMonth : defaultEndMonth(),
+    durationFrom: Math.min(durationFrom, durationTo),
+    durationTo: Math.max(durationFrom, durationTo),
   };
 }
 
 function serializeCompareParams(
   entries: PortfolioEntry[],
   startMonth: string,
-  endMonth: string
+  endMonth: string,
+  durationFrom: number,
+  durationTo: number
 ): URLSearchParams {
   const params = new URLSearchParams();
   const str = entries
@@ -160,6 +221,8 @@ function serializeCompareParams(
   if (str) params.set('p', str);
   params.set('startMonth', startMonth);
   params.set('endMonth', endMonth);
+  params.set('durationFrom', String(Math.min(durationFrom, durationTo)));
+  params.set('durationTo', String(Math.max(durationFrom, durationTo)));
   return params;
 }
 
@@ -261,6 +324,14 @@ export default function LumpsumSipCompare(): React.ReactElement {
     const parsed = parseCompareParams(searchParams);
     return parsed?.endMonth ?? defaultEndMonth();
   });
+  const [durationFrom, setDurationFrom] = useState<number>(() => {
+    const parsed = parseCompareParams(searchParams);
+    return parsed?.durationFrom ?? 1;
+  });
+  const [durationTo, setDurationTo] = useState<number>(() => {
+    const parsed = parseCompareParams(searchParams);
+    return parsed?.durationTo ?? 1;
+  });
   const [hasResults, setHasResults] = useState(false);
 
   const runPriceFetch = useCallback(
@@ -312,6 +383,8 @@ export default function LumpsumSipCompare(): React.ReactElement {
     setEntries(parsed.entries);
     setStartMonth(parsed.startMonth);
     setEndMonth(parsed.endMonth);
+    setDurationFrom(parsed.durationFrom);
+    setDurationTo(parsed.durationTo);
 
     if (!hasValidCompareEntries(parsed.entries) || parsed.startMonth > parsed.endMonth) {
       setPriceDataByTicker({});
@@ -348,12 +421,17 @@ export default function LumpsumSipCompare(): React.ReactElement {
   }, [searchParams.toString(), runPriceFetch]);
 
   const isRangeInvalid = startMonth > endMonth;
+  const isDurationInvalid =
+    !Number.isFinite(durationFrom) ||
+    !Number.isFinite(durationTo) ||
+    durationFrom < 1 ||
+    durationTo < 1 ||
+    durationFrom > 12 ||
+    durationTo > 12;
 
   const allValidEntries = entries.filter((e) => e.ticker.trim() && parseFloat(e.amount) > 0);
   const hasValidEntries = allValidEntries.length > 0;
   const uniqueTickers = [...new Set(allValidEntries.map((e) => e.ticker.trim().toUpperCase()))];
-
-  const endDateStr = monthToEndDate(endMonth);
 
   const handleAddRow = () => {
     setEntries((prev) => [...prev, { id: crypto.randomUUID?.() ?? String(Date.now()), ticker: '', amount: '' }]);
@@ -374,181 +452,137 @@ export default function LumpsumSipCompare(): React.ReactElement {
   };
 
   const handleCompare = () => {
-    if (!hasValidEntries || isRangeInvalid) return;
-    setSearchParams(serializeCompareParams(entries, startMonth, endMonth), { replace: true });
+    if (!hasValidEntries || isRangeInvalid || isDurationInvalid) return;
+    setSearchParams(
+      serializeCompareParams(entries, startMonth, endMonth, durationFrom, durationTo),
+      { replace: true }
+    );
   };
 
   const months = getMonthsBetween(startMonth, endMonth);
+  const durationBuckets = getDurationBuckets(
+    clampDurationMonths(durationFrom, 1),
+    clampDurationMonths(durationTo, 1)
+  );
 
   /* ─────────────── Compute Results ─────────────── */
 
-  const compareResult = (() => {
+  const winnerGridResult = (() => {
     const validEntries = entries.filter((e) => e.ticker.trim() && parseFloat(e.amount) > 0);
-
-    /* -- LUMPSUM side -- */
-    const lumpsumInvestDate = new Date(startMonth + '-01T12:00:00Z');
-    const lumpsumEndDate = new Date(endDateStr + 'T23:59:59Z');
-
-    const lumpsumDetails = validEntries.map((e) => {
-      const ticker = e.ticker.trim().toUpperCase();
-      const totalAmt = parseFloat(e.amount) || 0;
-      const data = priceDataByTicker[ticker];
-      const startPrice = data?.length ? getPriceAtDate(data, lumpsumInvestDate) : 0;
-      const endPrice = data?.length ? getPriceAtDate(data, lumpsumEndDate) : 0;
-      const units = startPrice > 0 ? totalAmt / startPrice : 0;
-      const endValue = units * endPrice;
-      return { ticker, amount: totalAmt, startPrice, endPrice, units, endValue };
-    }).filter((s) => s.units > 0);
-
-    const lumpsumTotalInvested = lumpsumDetails.reduce((s, d) => s + d.amount, 0);
-    const lumpsumTotalEndValue = lumpsumDetails.reduce((s, d) => s + d.endValue, 0);
-
-    let lumpsumXirr: number | null = null;
-    if (lumpsumTotalInvested > 0) {
-      try {
-        lumpsumXirr = xirr([
-          { amount: -lumpsumTotalInvested, when: lumpsumInvestDate },
-          { amount: lumpsumTotalEndValue, when: lumpsumEndDate },
-        ]);
-      } catch { /* ignore */ }
+    if (validEntries.length === 0) {
+      return {
+        durationBuckets: [] as number[],
+        endMonths: [] as string[],
+        combinations: [] as Array<{
+          endMonth: string;
+          durationMonths: number;
+          startMonth: string;
+          lumpsumEndValue: number;
+          sipEndValue: number;
+          winner: 'Lumpsum' | 'SIP' | 'Tie';
+          advantage: number;
+        }>,
+        summaryByDuration: [] as Array<{
+          durationMonths: number;
+          windows: number;
+          lumpsumWins: number;
+          sipWins: number;
+          ties: number;
+          avgLumpsumEndValue: number;
+          avgSipEndValue: number;
+        }>,
+      };
     }
 
-    /* -- SIP side -- */
-    const sipTransactions: Array<{ amount: number; when: Date }> = [];
-    const sipUnitsByTicker: Record<string, number> = {};
-    let sipTotalInvested = 0;
-
-    validEntries.forEach((e) => {
-      const ticker = e.ticker.trim().toUpperCase();
-      const totalAmt = parseFloat(e.amount) || 0;
-      const monthlyAmount = months.length > 0 ? totalAmt / months.length : 0;
-      sipUnitsByTicker[ticker] = 0;
-
-      months.forEach((monthStr) => {
-        const investDate = new Date(monthStr + '-01T12:00:00Z');
-        const data = priceDataByTicker[ticker];
-        if (!data || data.length === 0) return;
-        const price = getPriceAtDate(data, investDate);
-        if (price > 0 && monthlyAmount > 0) {
-          sipUnitsByTicker[ticker] += monthlyAmount / price;
-          sipTotalInvested += monthlyAmount;
-          sipTransactions.push({ amount: -monthlyAmount, when: investDate });
-        }
-      });
-    });
-
-    const sipEndDate = new Date(endDateStr + 'T23:59:59Z');
-    const sipDetails = validEntries.map((e) => {
-      const ticker = e.ticker.trim().toUpperCase();
-      const totalAmt = parseFloat(e.amount) || 0;
-      const monthlyAmount = months.length > 0 ? totalAmt / months.length : 0;
-      const data = priceDataByTicker[ticker];
-      const units = sipUnitsByTicker[ticker] ?? 0;
-      const endPrice = data?.length ? getPriceAtDate(data, sipEndDate) : 0;
-      const endValue = units * endPrice;
-      const invested = monthlyAmount * months.length;
-      return { ticker, amount: invested, monthlyAmount, units, endValue };
-    }).filter((s) => s.units > 0);
-
-    const sipTotalEndValue = sipDetails.reduce((s, d) => s + d.endValue, 0);
-
-    // Aggregate SIP transactions for XIRR
-    sipTransactions.sort((a, b) => a.when.getTime() - b.when.getTime());
-    const uniqueByDate = new Map<string, number>();
-    sipTransactions.forEach((t) => {
-      const key = t.when.toISOString().slice(0, 10);
-      uniqueByDate.set(key, (uniqueByDate.get(key) ?? 0) + t.amount);
-    });
-    const xirrTransactions = [
-      ...Array.from(uniqueByDate.entries()).map(([d, amt]) => ({ amount: amt, when: new Date(d) })),
-      { amount: sipTotalEndValue, when: sipEndDate },
-    ].sort((a, b) => a.when.getTime() - b.when.getTime());
-
-    let sipXirr: number | null = null;
-    try {
-      sipXirr = xirr(xirrTransactions);
-    } catch { /* ignore */ }
-
-    // Monthly breakdown (SIP)
-    const monthlyBreakdown: Array<{
-      month: string;
-      ticker: string;
-      price: number;
-      monthEndPrice: number;
-      sipAmount: number;
-      unitsBought: number;
-      accumulatedUnits: number;
-      investment: number;
-      cumulativeInvested: number;
-      value: number;
-      returnPct: number | null;
+    const combinations: Array<{
+      endMonth: string;
+      durationMonths: number;
+      startMonth: string;
+      lumpsumEndValue: number;
+      sipEndValue: number;
+      winner: 'Lumpsum' | 'SIP' | 'Tie';
+      advantage: number;
     }> = [];
-    const bdCumulativeUnits: Record<string, number> = {};
-    let bdCumulativeInvested = 0;
 
-    months.forEach((monthStr) => {
-      const lastDay = localMonthEndDateTime(monthStr);
-      const investDate = new Date(monthStr + '-01T12:00:00Z');
-      let monthInvestment = 0;
+    months.forEach((candidateEndMonth) => {
+      durationBuckets.forEach((durationMonths) => {
+        const windowStartMonth = addMonths(candidateEndMonth, -(durationMonths - 1));
+        if (windowStartMonth < startMonth) return;
+        const windowMonths = getMonthsBetween(windowStartMonth, candidateEndMonth);
+        if (windowMonths.length !== durationMonths) return;
 
-      validEntries.forEach((e) => {
-        const ticker = e.ticker.trim().toUpperCase();
-        const totalAmt = parseFloat(e.amount) || 0;
-        const monthlyAmount = months.length > 0 ? totalAmt / months.length : 0;
-        const data = priceDataByTicker[ticker];
-        if (!data || data.length === 0) return;
-        const price = getPriceAtDate(data, investDate);
-        if (price > 0 && monthlyAmount > 0) {
-          const unitsBought = monthlyAmount / price;
-          bdCumulativeUnits[ticker] = (bdCumulativeUnits[ticker] ?? 0) + unitsBought;
-          monthInvestment += monthlyAmount;
-        }
-      });
-      bdCumulativeInvested += monthInvestment;
+        const lumpsumInvestDate = new Date(windowStartMonth + '-01T12:00:00Z');
+        const endDate = new Date(monthToEndDate(candidateEndMonth) + 'T23:59:59Z');
 
-      const value = Object.entries(bdCumulativeUnits).reduce((sum, [ticker, units]) => {
-        const data = priceDataByTicker[ticker];
-        if (!data) return sum;
-        return sum + units * getPriceAtDate(data, lastDay);
-      }, 0);
-      const returnPct = bdCumulativeInvested > 0 ? ((value - bdCumulativeInvested) / bdCumulativeInvested) * 100 : null;
+        let lumpsumEndValue = 0;
+        let sipEndValue = 0;
 
-      validEntries.forEach((e) => {
-        const ticker = e.ticker.trim().toUpperCase();
-        const totalAmt = parseFloat(e.amount) || 0;
-        const monthlyAmount = months.length > 0 ? totalAmt / months.length : 0;
-        const data = priceDataByTicker[ticker];
-        if (!data || data.length === 0) return;
-        const price = getPriceAtDate(data, investDate);
-        const monthEndPrice = getPriceAtDate(data, lastDay);
-        const unitsBought = price > 0 && monthlyAmount > 0 ? monthlyAmount / price : 0;
-        const accumulatedUnits = bdCumulativeUnits[ticker] ?? 0;
-        monthlyBreakdown.push({
-          month: monthStr,
-          ticker,
-          price,
-          monthEndPrice,
-          sipAmount: monthlyAmount,
-          unitsBought,
-          accumulatedUnits,
-          investment: monthInvestment,
-          cumulativeInvested: bdCumulativeInvested,
-          value,
-          returnPct,
+        validEntries.forEach((e) => {
+          const ticker = e.ticker.trim().toUpperCase();
+          const totalAmt = parseFloat(e.amount) || 0;
+          const data = priceDataByTicker[ticker];
+          if (!data || data.length === 0 || totalAmt <= 0) return;
+
+          const lumpsumStartPrice = getPriceAtDate(data, lumpsumInvestDate);
+          const endPrice = getPriceAtDate(data, endDate);
+          if (lumpsumStartPrice > 0) {
+            const units = totalAmt / lumpsumStartPrice;
+            lumpsumEndValue += units * endPrice;
+          }
+
+          const monthlyAmount = totalAmt / durationMonths;
+          let sipUnits = 0;
+          windowMonths.forEach((monthStr) => {
+            const sipInvestDate = new Date(monthStr + '-01T12:00:00Z');
+            const sipPrice = getPriceAtDate(data, sipInvestDate);
+            if (sipPrice > 0) {
+              sipUnits += monthlyAmount / sipPrice;
+            }
+          });
+          sipEndValue += sipUnits * endPrice;
+        });
+
+        const advantage = lumpsumEndValue - sipEndValue;
+        const winner: 'Lumpsum' | 'SIP' | 'Tie' =
+          advantage > 0 ? 'Lumpsum' : advantage < 0 ? 'SIP' : 'Tie';
+
+        combinations.push({
+          endMonth: candidateEndMonth,
+          durationMonths,
+          startMonth: windowStartMonth,
+          lumpsumEndValue,
+          sipEndValue,
+          winner,
+          advantage: Math.abs(advantage),
         });
       });
     });
 
+    const summaryByDuration = durationBuckets.map((durationMonths) => {
+      const rows = combinations.filter((c) => c.durationMonths === durationMonths);
+      const lumpsumWins = rows.filter((r) => r.winner === 'Lumpsum').length;
+      const sipWins = rows.filter((r) => r.winner === 'SIP').length;
+      const ties = rows.filter((r) => r.winner === 'Tie').length;
+      const avgLumpsumEndValue =
+        rows.length > 0 ? rows.reduce((s, r) => s + r.lumpsumEndValue, 0) / rows.length : 0;
+      const avgSipEndValue =
+        rows.length > 0 ? rows.reduce((s, r) => s + r.sipEndValue, 0) / rows.length : 0;
+      return {
+        durationMonths,
+        windows: rows.length,
+        lumpsumWins,
+        sipWins,
+        ties,
+        avgLumpsumEndValue,
+        avgSipEndValue,
+      };
+    });
+
     return {
-      lumpsumDetails,
-      lumpsumTotalInvested,
-      lumpsumTotalEndValue,
-      lumpsumXirr,
-      sipDetails,
-      sipTotalInvested,
-      sipTotalEndValue,
-      sipXirr,
-      monthlyBreakdown,
+      durationBuckets,
+      endMonths: months,
+      combinations,
+      summaryByDuration,
     };
   })();
 
@@ -559,6 +593,252 @@ export default function LumpsumSipCompare(): React.ReactElement {
     .map((t) => ({ ticker: t, data: priceDataByTicker[t]! }));
 
   const hasAnyChartData = hasResults && priceChartSeries.length > 0;
+  const weightedAverageSeries = (() => {
+    const validEntries = entries
+      .filter((e) => e.ticker.trim() && parseFloat(e.amount) > 0)
+      .map((e) => ({ ticker: e.ticker.trim().toUpperCase(), amount: parseFloat(e.amount) || 0 }));
+    if (validEntries.length === 0) return [] as Array<{ date: Date; nav: number }>;
+
+    const totalAmount = validEntries.reduce((sum, e) => sum + e.amount, 0);
+    if (totalAmount <= 0) return [] as Array<{ date: Date; nav: number }>;
+
+    const weightByTicker = new Map(validEntries.map((e) => [e.ticker, e.amount / totalAmount]));
+    const dateKeySet = new Set<string>();
+    validEntries.forEach(({ ticker }) => {
+      const data = priceDataByTicker[ticker];
+      if (!data || data.length === 0) return;
+      data.forEach((point) => dateKeySet.add(point.date.toISOString().slice(0, 10)));
+    });
+
+    const dates = Array.from(dateKeySet)
+      .map((d) => new Date(`${d}T12:00:00Z`))
+      .sort((a, b) => a.getTime() - b.getTime());
+
+    return dates.map((date) => {
+      let weightedPrice = 0;
+      validEntries.forEach(({ ticker }) => {
+        const data = priceDataByTicker[ticker];
+        if (!data || data.length === 0) return;
+        const price = getPriceAtDate(data, date);
+        const weight = weightByTicker.get(ticker) ?? 0;
+        weightedPrice += price * weight;
+      });
+      return { date, nav: weightedPrice };
+    });
+  })();
+
+  const weightedWinnerChartOptions: Highcharts.Options | null = (() => {
+    if (!hasResults || weightedAverageSeries.length === 0) return null;
+
+    const markerDuration = durationBuckets[0] ?? 1;
+    const baseBucketCombos = winnerGridResult.combinations
+      .filter((combo) => combo.durationMonths === markerDuration)
+      .sort((a, b) => a.endMonth.localeCompare(b.endMonth));
+
+    const comboByEndMonth = new Map(baseBucketCombos.map((combo) => [combo.endMonth, combo] as const));
+    const lumpsumPoints: Array<[number, number]> = [];
+    const sipPoints: Array<[number, number]> = [];
+    const tiePoints: Array<[number, number]> = [];
+
+    weightedAverageSeries.forEach((point) => {
+      const month = formatDateAsMonth(point.date);
+      const combo = comboByEndMonth.get(month);
+      if (!combo) return;
+      const xy: [number, number] = [point.date.getTime(), point.nav];
+      if (combo.winner === 'Lumpsum') lumpsumPoints.push(xy);
+      else if (combo.winner === 'SIP') sipPoints.push(xy);
+      else tiePoints.push(xy);
+    });
+
+    return {
+      chart: {
+        backgroundColor: '#ffffff',
+        borderRadius: 8,
+        spacing: [20, 20, 20, 20],
+        height: 460,
+      },
+      title: { text: 'Portfolio weighted average price with winner months' },
+      credits: { enabled: false },
+      xAxis: {
+        type: 'datetime',
+        title: { text: 'Date' },
+      },
+      yAxis: {
+        title: { text: 'Weighted average price ($)' },
+      },
+      legend: { enabled: true },
+      tooltip: {
+        shared: true,
+      },
+      plotOptions: {
+        series: {
+          animation: false,
+        },
+      },
+      series: [
+        {
+          type: 'line',
+          name: 'Weighted avg price',
+          data: weightedAverageSeries.map((p) => [p.date.getTime(), p.nav]),
+          color: '#0f172a',
+          lineWidth: 2,
+          marker: { enabled: false },
+        },
+        {
+          type: 'scatter',
+          name: `Lumpsum better (${markerDuration}m window)`,
+          data: lumpsumPoints,
+          color: '#6366f1',
+          marker: { radius: 4, symbol: 'circle' },
+        },
+        {
+          type: 'scatter',
+          name: `SIP better (${markerDuration}m window)`,
+          data: sipPoints,
+          color: '#ec4899',
+          marker: { radius: 4, symbol: 'circle' },
+        },
+        {
+          type: 'scatter',
+          name: `Tie (${markerDuration}m window)`,
+          data: tiePoints,
+          color: '#64748b',
+          marker: { radius: 4, symbol: 'circle' },
+        },
+      ],
+    };
+  })();
+
+  const winnerHeatmapOptions: Highcharts.Options | null = (() => {
+    if (!hasResults || winnerGridResult.combinations.length === 0) return null;
+
+    const endMonthCategories = winnerGridResult.endMonths;
+    const startMonthCategories = winnerGridResult.endMonths;
+    const pointByKey = new Map(
+      winnerGridResult.combinations.map((combo) => [`${combo.startMonth}|${combo.endMonth}`, combo] as const)
+    );
+
+    const data: Array<[number, number, number]> = [];
+    startMonthCategories.forEach((sm, rowIndex) => {
+      endMonthCategories.forEach((em, colIndex) => {
+        const combo = pointByKey.get(`${sm}|${em}`);
+        if (!combo) return;
+        const encodedWinner = combo.winner === 'Lumpsum' ? 1 : combo.winner === 'SIP' ? -1 : 0;
+        data.push([colIndex, rowIndex, encodedWinner]);
+      });
+    });
+
+    return {
+      chart: {
+        type: 'heatmap',
+        height: Math.max(280, endMonthCategories.length * 28 + 110),
+        backgroundColor: '#ffffff',
+      },
+      title: { text: undefined },
+      credits: { enabled: false },
+      xAxis: {
+        categories: endMonthCategories.map(formatMonthLabel),
+        title: { text: 'End month' },
+      },
+      yAxis: {
+        categories: startMonthCategories.map(formatMonthLabel),
+        title: { text: 'Start month' },
+        reversed: true,
+      },
+      legend: {
+        align: 'right',
+        layout: 'vertical',
+        verticalAlign: 'middle',
+      },
+      colorAxis: {
+        min: -1,
+        max: 1,
+        stops: [
+          [0, '#ec4899'],
+          [0.5, '#e2e8f0'],
+          [1, '#6366f1'],
+        ],
+      },
+      tooltip: {
+        formatter: function (this: any) {
+          const endMonth = endMonthCategories[this.point.x];
+          const startMonth = startMonthCategories[this.point.y];
+          const combo = pointByKey.get(`${startMonth}|${endMonth}`);
+          if (!combo) return '';
+          return `
+            <strong>${formatMonthLabel(combo.startMonth)} to ${formatMonthLabel(combo.endMonth)}</strong><br/>
+            Duration: ${combo.durationMonths} months<br/>
+            Winner: <strong>${combo.winner}</strong><br/>
+            Lumpsum: $${combo.lumpsumEndValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}<br/>
+            SIP: $${combo.sipEndValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}<br/>
+            Advantage: $${combo.advantage.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          `;
+        },
+      },
+      series: [
+        {
+          type: 'heatmap',
+          data,
+          dataLabels: {
+            enabled: true,
+            style: { textOutline: 'none', fontSize: '10px' },
+            formatter: function (this: any) {
+              if (this.point.value > 0) return 'L';
+              if (this.point.value < 0) return 'S';
+              return 'T';
+            },
+          },
+        },
+      ],
+    };
+  })();
+
+  const handleDownloadJson = () => {
+    const validEntries = entries
+      .filter((e) => e.ticker.trim() && parseFloat(e.amount) > 0)
+      .map((e) => ({
+        ticker: e.ticker.trim().toUpperCase(),
+        amount: parseFloat(e.amount) || 0,
+      }));
+
+    const rawPricesByTicker = Object.fromEntries(
+      Object.entries(priceDataByTicker).map(([ticker, data]) => [
+        ticker,
+        data.map((point) => ({
+          date: point.date.toISOString(),
+          nav: point.nav,
+        })),
+      ])
+    );
+
+    const payload = {
+      metadata: {
+        exportedAt: new Date().toISOString(),
+        sourcePage: 'compare',
+      },
+      parameters: {
+        holdings: validEntries,
+        startMonth,
+        endMonth,
+        durationFrom: Math.min(durationFrom, durationTo),
+        durationTo: Math.max(durationFrom, durationTo),
+        durationBuckets,
+        monthsInRange: months,
+      },
+      rawPricesByTicker,
+      results: {
+        summaryByDuration: winnerGridResult.summaryByDuration,
+        winnerGrid: winnerGridResult.combinations,
+        weightedAveragePriceSeries: weightedAverageSeries.map((point) => ({
+          date: point.date.toISOString(),
+          weightedPrice: point.nav,
+        })),
+      },
+    };
+
+    const filename = `compare-export-${startMonth}-to-${endMonth}.json`;
+    downloadJsonFile(payload, filename);
+  };
 
   /* ─────────────── Render ─────────────── */
 
@@ -567,7 +847,7 @@ export default function LumpsumSipCompare(): React.ReactElement {
       <LoadingOverlay active={loading} />
 
       <PageIntro title="Compare Lumpsum vs SIP">
-        Enter total dollars per ticker for the same holdings. Lumpsum invests the full amount at the start month; SIP spreads it evenly across each month in the range. Use ~12 for a synthetic 12% path.
+        Enter total dollars per ticker. For each duration in your range (e.g. 1–3 months), every rolling window compares X-month lumpsum vs X-month SIP — not a full start-to-end SIP. Use ~12 for a synthetic 12% path.
       </PageIntro>
 
       <PageCard>
@@ -596,12 +876,56 @@ export default function LumpsumSipCompare(): React.ReactElement {
               style={dateInputStyle}
             />
           </Block>
-          <Button kind="primary" onClick={handleCompare} disabled={!hasValidEntries || isRangeInvalid}>
+          <Block display="flex" alignItems="center" gridGap="scale200" $style={{ flexWrap: 'wrap' }}>
+            <LabelMedium marginBottom="0" marginTop="0">Duration from (months)</LabelMedium>
+            <Input
+              value={Number.isFinite(durationFrom) ? String(durationFrom) : ''}
+              type="number"
+              min={1}
+              max={12}
+              onChange={(e) => {
+                const raw = (e.target as HTMLInputElement).value;
+                const next = Number(raw);
+                if (raw === '') setDurationFrom(Number.NaN);
+                else if (Number.isFinite(next)) setDurationFrom(next);
+              }}
+              placeholder="1"
+              size="compact"
+              overrides={{ Root: { style: { width: '90px' } } }}
+            />
+          </Block>
+          <Block display="flex" alignItems="center" gridGap="scale200" $style={{ flexWrap: 'wrap' }}>
+            <LabelMedium marginBottom="0" marginTop="0">Duration to (months)</LabelMedium>
+            <Input
+              value={Number.isFinite(durationTo) ? String(durationTo) : ''}
+              type="number"
+              min={1}
+              max={12}
+              onChange={(e) => {
+                const raw = (e.target as HTMLInputElement).value;
+                const next = Number(raw);
+                if (raw === '') setDurationTo(Number.NaN);
+                else if (Number.isFinite(next)) setDurationTo(next);
+              }}
+              placeholder="3"
+              size="compact"
+              overrides={{ Root: { style: { width: '90px' } } }}
+            />
+          </Block>
+          <Button kind="primary" onClick={handleCompare} disabled={!hasValidEntries || isRangeInvalid || isDurationInvalid}>
             Compare
+          </Button>
+          <Button kind="secondary" onClick={handleDownloadJson} disabled={!hasResults}>
+            Download JSON
           </Button>
           {isRangeInvalid && (
             <LabelMedium marginBottom="0" marginTop="0" overrides={{ Block: { style: ({ $theme }) => ({ color: $theme.colors.negative }) } }}>
               Start month must be before end month
+            </LabelMedium>
+          )}
+          {isDurationInvalid && (
+            <LabelMedium marginBottom="0" marginTop="0" overrides={{ Block: { style: ({ $theme }) => ({ color: $theme.colors.negative }) } }}>
+              Duration range must be between 1 and 12 months
             </LabelMedium>
           )}
         </Block>
@@ -609,219 +933,123 @@ export default function LumpsumSipCompare(): React.ReactElement {
 
       {hasAnyChartData && (
         <Block maxWidth="960px" margin="0 auto" width="100%">
-          {(() => {
-            const result = compareResult;
-            const hasLumpsum = result.lumpsumDetails.length > 0;
-            const hasSip = result.sipDetails.length > 0;
-            if (!hasLumpsum && !hasSip) return null;
-
-            const lumpsumReturnPct = result.lumpsumTotalInvested > 0
-              ? ((result.lumpsumTotalEndValue - result.lumpsumTotalInvested) / result.lumpsumTotalInvested) * 100
-              : null;
-            const sipReturnPct = result.sipTotalInvested > 0
-              ? ((result.sipTotalEndValue - result.sipTotalInvested) / result.sipTotalInvested) * 100
-              : null;
-
-            return (
-              <Block
-                key="compare-summary"
-                padding="scale600"
-                marginBottom="scale500"
-                backgroundColor="backgroundPrimary"
-                overrides={{
-                  Block: {
-                    style: ({ $theme }) => ({
-                      borderRadius: $theme.borders.radius300,
-                      fontSize: '14px',
-                      border: `1px solid ${$theme.colors.borderOpaque}`,
-                      boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
-                    }),
-                  },
-                }}
-              >
-                <LabelMedium marginBottom="scale400" $style={{ fontWeight: 700, fontSize: '16px' }}>
-                  Results
-                </LabelMedium>
-                <Table
-                  columns={['Scenario', 'Total Invested ($)', 'End Value ($)', 'Return (%)', 'XIRR (%)']}
-                  data={[
-                    [
-                      'Lumpsum (all at start)',
-                      result.lumpsumTotalInvested.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-                      result.lumpsumTotalEndValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-                      lumpsumReturnPct != null ? (
-                        <span style={{ color: lumpsumReturnPct >= 0 ? '#16a34a' : '#dc2626' }}>
-                          {lumpsumReturnPct >= 0 ? '+' : ''}{lumpsumReturnPct.toFixed(2)}%
-                        </span>
-                      ) : '—',
-                      result.lumpsumXirr != null ? (
-                        <span style={{ color: result.lumpsumXirr >= 0 ? '#16a34a' : '#dc2626' }}>
-                          {(result.lumpsumXirr * 100).toFixed(2)}%
-                        </span>
-                      ) : '—',
-                    ],
-                    [
-                      'SIP (equal monthly)',
-                      result.sipTotalInvested.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-                      result.sipTotalEndValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-                      sipReturnPct != null ? (
-                        <span style={{ color: sipReturnPct >= 0 ? '#16a34a' : '#dc2626' }}>
-                          {sipReturnPct >= 0 ? '+' : ''}{sipReturnPct.toFixed(2)}%
-                        </span>
-                      ) : '—',
-                      result.sipXirr != null ? (
-                        <span style={{ color: result.sipXirr >= 0 ? '#16a34a' : '#dc2626' }}>
-                          {(result.sipXirr * 100).toFixed(2)}%
-                        </span>
-                      ) : '—',
-                    ],
-                  ]}
-                  divider="horizontal"
-                  size="compact"
-                />
-                <Block marginTop="scale400" paddingTop="scale300" $style={{ borderTop: '1px solid #e5e7eb' }}>
-                  <ParagraphMedium marginTop="0" marginBottom="0">
-                    <strong>Winner:</strong>{' '}
-                    {result.lumpsumTotalEndValue > result.sipTotalEndValue ? (
-                      <span style={{ color: '#6366f1', fontWeight: 600 }}>
-                        Lumpsum (+${(result.lumpsumTotalEndValue - result.sipTotalEndValue).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} more)
-                      </span>
-                    ) : result.sipTotalEndValue > result.lumpsumTotalEndValue ? (
-                      <span style={{ color: '#ec4899', fontWeight: 600 }}>
-                        SIP (+${(result.sipTotalEndValue - result.lumpsumTotalEndValue).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} more)
-                      </span>
-                    ) : (
-                      <span style={{ fontWeight: 600 }}>Tie</span>
-                    )}
-                  </ParagraphMedium>
-                </Block>
-
-                {/* Per-stock breakdown — Lumpsum */}
-                {result.lumpsumDetails.length >= 1 && (
-                  <Block marginTop="scale500">
-                    <LabelMedium marginBottom="scale200" $style={{ fontWeight: 500, fontSize: '13px' }}>
-                      Lumpsum Breakdown (per stock)
-                    </LabelMedium>
-                    <Table
-                      columns={['Ticker', 'Invested ($)', 'Units', 'End Value ($)', 'Return (%)']}
-                      data={result.lumpsumDetails.map((d) => {
-                        const retPct = d.amount > 0 ? ((d.endValue - d.amount) / d.amount) * 100 : null;
-                        return [
-                          d.ticker,
-                          d.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-                          d.units.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 6 }),
-                          d.endValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-                          retPct != null ? (
-                            <span style={{ color: retPct >= 0 ? '#16a34a' : '#dc2626' }}>
-                              {retPct >= 0 ? '+' : ''}{retPct.toFixed(2)}%
-                            </span>
-                          ) : '—',
-                        ];
-                      })}
-                      divider="horizontal"
-                      size="compact"
-                    />
-                  </Block>
-                )}
-
-                {/* Per-stock breakdown — SIP */}
-                {result.sipDetails.length >= 1 && (
-                  <Block marginTop="scale500">
-                    <LabelMedium marginBottom="scale200" $style={{ fontWeight: 500, fontSize: '13px' }}>
-                      SIP Breakdown (per stock)
-                    </LabelMedium>
-                    <Table
-                      columns={['Ticker', 'Invested ($)', '$/mo', 'Units', 'End Value ($)', 'Return (%)']}
-                      data={result.sipDetails.map((d) => {
-                        const retPct = d.amount > 0 ? ((d.endValue - d.amount) / d.amount) * 100 : null;
-                        return [
-                          d.ticker,
-                          d.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-                          d.monthlyAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-                          d.units.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 6 }),
-                          d.endValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-                          retPct != null ? (
-                            <span style={{ color: retPct >= 0 ? '#16a34a' : '#dc2626' }}>
-                              {retPct >= 0 ? '+' : ''}{retPct.toFixed(2)}%
-                            </span>
-                          ) : '—',
-                        ];
-                      })}
-                      divider="horizontal"
-                      size="compact"
-                    />
-                  </Block>
-                )}
-              </Block>
-            );
-          })()}
-
-          {/* Stock prices over the selected range (same chart as Lumpsum tab) */}
-          {priceChartSeries.length > 0 && (
-            <StockPriceChart key="compare-price" series={priceChartSeries} colors={COLORS} />
-          )}
-
-          {/* SIP Monthly Breakdown Tables */}
-          {compareResult.monthlyBreakdown.length > 0 && (
+          {winnerGridResult.summaryByDuration.length > 0 && (
             <Block
-              key="sip-breakdown"
-              marginTop="scale700"
+              key="compare-summary"
               padding="scale600"
+              marginBottom="scale500"
               backgroundColor="backgroundPrimary"
               overrides={{
                 Block: {
                   style: ({ $theme }) => ({
                     borderRadius: $theme.borders.radius300,
-                    overflowX: 'auto',
+                    fontSize: '14px',
                     border: `1px solid ${$theme.colors.borderOpaque}`,
                     boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
                   }),
                 },
               }}
             >
-              <LabelMedium marginBottom="scale400" $style={{ fontWeight: 700, fontSize: '16px' }}>
-                SIP calculation breakdown
+              <LabelMedium marginBottom="scale200" $style={{ fontWeight: 700, fontSize: '16px' }}>
+                Results by duration
               </LabelMedium>
-              <ParagraphMedium marginTop="0" marginBottom="scale300" color="contentSecondary" $style={{ fontSize: '13px' }}>
-                Per ticker: Price ($) = on SIP date (1st of month); Month-end price ($) = on last calendar day of month. Value ($) is the portfolio total. Investment/Cumulative/Return are portfolio totals.
-              </ParagraphMedium>
+              <ParagraphSmall marginTop="0" marginBottom="scale300" color="contentSecondary">
+                Each row is rolling X-month lumpsum vs X-month SIP over your date range (not a full-period SIP).
+              </ParagraphSmall>
               <Table
                 columns={[
-                  'Month',
-                  'Ticker',
-                  'Price ($)',
-                  'SIP Amount ($)',
-                  'Units Bought',
-                  'Accumulated Units',
-                  'Investment ($)',
-                  'Cumulative ($)',
-                  'Month-end price ($)',
-                  'Value ($)',
-                  'Return (%)',
+                  'Duration (months)',
+                  'Windows',
+                  'Lumpsum wins',
+                  'SIP wins',
+                  'Ties',
+                  'Avg lumpsum end ($)',
+                  'Avg SIP end ($)',
                 ]}
-                data={compareResult.monthlyBreakdown.map((row) => [
-                  row.month,
-                  row.ticker,
-                  row.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-                  row.sipAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-                  row.unitsBought.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-                  row.accumulatedUnits.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-                  row.investment.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-                  row.cumulativeInvested.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-                  row.monthEndPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-                  row.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-                  row.returnPct != null ? (
-                    <span style={{ color: row.returnPct >= 0 ? '#16a34a' : '#dc2626' }}>
-                      {(row.returnPct >= 0 ? '+' : '')}{row.returnPct.toFixed(2)}%
-                    </span>
-                  ) : (
-                    '—'
-                  ),
+                data={winnerGridResult.summaryByDuration.map((row) => [
+                  row.durationMonths,
+                  row.windows,
+                  row.lumpsumWins,
+                  row.sipWins,
+                  row.ties,
+                  row.avgLumpsumEndValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                  row.avgSipEndValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
                 ])}
                 divider="horizontal"
                 size="compact"
               />
             </Block>
+          )}
+
+          {winnerHeatmapOptions && (
+            <Block
+              key="winner-grid"
+              marginBottom="scale500"
+              padding="scale600"
+              backgroundColor="backgroundPrimary"
+              overrides={{
+                Block: {
+                  style: ({ $theme }) => ({
+                    borderRadius: $theme.borders.radius300,
+                    border: `1px solid ${$theme.colors.borderOpaque}`,
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                  }),
+                },
+              }}
+            >
+              <LabelMedium marginBottom="scale200" $style={{ fontWeight: 700, fontSize: '16px' }}>
+                Lumpsum vs SIP winner grid
+              </LabelMedium>
+              <ParagraphSmall marginTop="0" marginBottom="scale300" color="contentSecondary">
+                Only windows whose length is in your duration range ({durationBuckets.join(', ')} months). L = Lumpsum, S = SIP, T = Tie.
+              </ParagraphSmall>
+              <HighchartsReact highcharts={Highcharts} options={winnerHeatmapOptions} />
+              <Table
+                columns={['End month', 'Duration (months)', 'Window start', 'Lumpsum end value ($)', 'SIP end value ($)', 'Winner', 'Advantage ($)']}
+                data={winnerGridResult.combinations.map((combo) => [
+                  combo.endMonth,
+                  combo.durationMonths,
+                  combo.startMonth,
+                  combo.lumpsumEndValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                  combo.sipEndValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                  combo.winner === 'Lumpsum'
+                    ? <span style={{ color: '#6366f1', fontWeight: 600 }}>Lumpsum</span>
+                    : combo.winner === 'SIP'
+                      ? <span style={{ color: '#ec4899', fontWeight: 600 }}>SIP</span>
+                      : <span style={{ fontWeight: 600 }}>Tie</span>,
+                  combo.advantage.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                ])}
+                divider="horizontal"
+                size="compact"
+              />
+            </Block>
+          )}
+
+          {weightedWinnerChartOptions && (
+            <Block
+              key="weighted-price-winner-chart"
+              marginBottom="scale500"
+              padding="scale600"
+              backgroundColor="backgroundPrimary"
+              overrides={{
+                Block: {
+                  style: ({ $theme }) => ({
+                    borderRadius: $theme.borders.radius300,
+                    border: `1px solid ${$theme.colors.borderOpaque}`,
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                  }),
+                },
+              }}
+            >
+              <ParagraphSmall marginTop="0" marginBottom="scale300" color="contentSecondary">
+                Weighted average portfolio price. Dots mark end months for the shortest duration in your range ({durationBuckets[0] ?? '—'}m): Lumpsum vs SIP win.
+              </ParagraphSmall>
+              <HighchartsReact highcharts={Highcharts} options={weightedWinnerChartOptions} />
+            </Block>
+          )}
+
+          {priceChartSeries.length > 0 && (
+            <StockPriceChart key="compare-price" series={priceChartSeries} colors={COLORS} />
           )}
         </Block>
       )}

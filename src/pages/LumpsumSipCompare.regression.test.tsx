@@ -9,6 +9,15 @@ import { yahooFinanceService } from '../services/yahooFinanceService';
 jest.mock('../components/charts/StockPriceChart', () => ({
   StockPriceChart: () => <div data-testid="stock-price-chart" />,
 }));
+jest.mock('highcharts/esm/highcharts', () => ({
+  __esModule: true,
+  default: {},
+}));
+jest.mock('highcharts/esm/modules/heatmap', () => ({}));
+jest.mock('highcharts-react-official', () => ({
+  __esModule: true,
+  default: () => <div data-testid="winner-grid-chart" />,
+}));
 
 const renderPage = () =>
   render(
@@ -42,6 +51,17 @@ describe('[REGRESSION] LumpsumSipCompare — /compare', () => {
     expect(screen.getByRole('button', { name: /compare/i })).toBeInTheDocument();
   });
 
+  it('STRUCTURE: Download JSON button exists', () => {
+    renderPage();
+    expect(screen.getByRole('button', { name: /download json/i })).toBeInTheDocument();
+  });
+
+  it('STRUCTURE: duration range inputs exist', () => {
+    renderPage();
+    expect(screen.getByPlaceholderText('1')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('3')).toBeInTheDocument();
+  });
+
   it('INTERACTION: Compare with synthetic ticker and amount renders price chart', async () => {
     renderPage();
     await userEvent.type(screen.getByPlaceholderText('Ticker (e.g. AAPL, ~12)'), '~12');
@@ -56,9 +76,17 @@ describe('[REGRESSION] LumpsumSipCompare — /compare', () => {
     await userEvent.type(screen.getByPlaceholderText('Total Amount'), '10000');
     await userEvent.click(screen.getByRole('button', { name: /compare/i }));
     await screen.findByTestId('stock-price-chart');
-    // Multiple elements match /lumpsum/i and /sip/i — use getAllByText
     expect(screen.getAllByText(/lumpsum/i).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/sip/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/results by duration/i)).toBeInTheDocument();
+  });
+
+  it('OUTPUT: winner grid chart renders after compare', async () => {
+    renderPage();
+    await userEvent.type(screen.getByPlaceholderText('Ticker (e.g. AAPL, ~12)'), '~12');
+    await userEvent.type(screen.getByPlaceholderText('Total Amount'), '10000');
+    await userEvent.click(screen.getByRole('button', { name: /compare/i }));
+    expect((await screen.findAllByTestId('winner-grid-chart')).length).toBeGreaterThanOrEqual(1);
   });
 
   it('REGRESSION: Compare button is disabled when no valid entries', () => {
@@ -71,5 +99,14 @@ describe('[REGRESSION] LumpsumSipCompare — /compare', () => {
     await userEvent.type(screen.getByPlaceholderText('Ticker (e.g. AAPL, ~12)'), '~12');
     await userEvent.type(screen.getByPlaceholderText('Total Amount'), '10000');
     expect(screen.getByRole('button', { name: /compare/i })).not.toBeDisabled();
+  });
+
+  it('REGRESSION: Download JSON enables after compare results load', async () => {
+    renderPage();
+    await userEvent.type(screen.getByPlaceholderText('Ticker (e.g. AAPL, ~12)'), '~12');
+    await userEvent.type(screen.getByPlaceholderText('Total Amount'), '10000');
+    await userEvent.click(screen.getByRole('button', { name: /compare/i }));
+    await screen.findByTestId('stock-price-chart');
+    expect(screen.getByRole('button', { name: /download json/i })).not.toBeDisabled();
   });
 });
